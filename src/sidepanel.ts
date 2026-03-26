@@ -45,6 +45,7 @@ interface DOMElements {
   replyUpBtn: HTMLButtonElement;
   replyDownBtn: HTMLButtonElement;
   clearBtn: HTMLButtonElement;
+  saveNextBtn: HTMLButtonElement;
   toast: HTMLElement;
   emptyState: HTMLElement;
 }
@@ -121,6 +122,7 @@ class BizCloserSidePanel {
       replyUpBtn: getElement<HTMLButtonElement>('replyUpBtn'),
       replyDownBtn: getElement<HTMLButtonElement>('replyDownBtn'),
       clearBtn: getElement('clearBtn'),
+      saveNextBtn: getElement<HTMLButtonElement>('saveNextBtn'),
       toast: getElement('toast'),
       emptyState: getElement('emptyState')
     };
@@ -142,10 +144,33 @@ class BizCloserSidePanel {
     this.elements.replyUpBtn.addEventListener('click', () => this.handleFeedbackClick('reply', 'up'));
     this.elements.replyDownBtn.addEventListener('click', () => this.handleFeedbackClick('reply', 'down'));
     this.elements.clearBtn.addEventListener('click', () => this.clearAll());
+    this.elements.saveNextBtn.addEventListener('click', () => this.handleSaveNext());
     this.elements.retryBtn.addEventListener('click', () => this.retryGeneration());
 
     // Input changes
     this.elements.threadInput.addEventListener('input', () => this.handleInputChange());
+  }
+
+  private async handleSaveNext(): Promise<void> {
+    const thread = this.elements.threadInput.value.trim();
+    if (!thread || !this.state.currentReply) {
+      this.showToast('Generate a reply before saving.');
+      return;
+    }
+
+    const payload = {
+      thread,
+      reply: this.state.currentReply,
+      analysis: this.state.analysis,
+      timestamp: new Date().toISOString()
+    };
+
+    const history = JSON.parse(localStorage.getItem('bizcloser_history_v1') || '[]') as any[];
+    history.unshift(payload);
+    localStorage.setItem('bizcloser_history_v1', JSON.stringify(history.slice(0, 50)));
+
+    this.showToast('Saved for training, clearing for next lead.');
+    this.clearAll();
   }
 
   /**
