@@ -27,6 +27,9 @@ interface DOMElements {
 // State management
 interface AppState {
   currentReply: string;
+  threadSummary: string;
+  threadAngle: string;
+  threadConfidence: string;
   isGenerating: boolean;
   uiState: UIState;
 }
@@ -41,6 +44,9 @@ class BizCloserSidePanel {
   constructor() {
     this.state = {
       currentReply: '',
+      threadSummary: '',
+      threadAngle: '',
+      threadConfidence: '',
       isGenerating: false,
       uiState: 'empty'
     };
@@ -157,6 +163,9 @@ class BizCloserSidePanel {
       }
 
       this.state.currentReply = data.reply;
+      this.state.threadSummary = data.summary || '';
+      this.state.threadAngle = data.angle || '';
+      this.state.threadConfidence = data.confidence || '';
       this.displayReply(data.reply);
       this.updateUIState('success');
 
@@ -281,6 +290,9 @@ class BizCloserSidePanel {
   private clearAll(): void {
     this.elements.threadInput.value = '';
     this.state.currentReply = '';
+    this.state.threadSummary = '';
+    this.state.threadAngle = '';
+    this.state.threadConfidence = '';
     this.updateUIState('empty');
     this.elements.threadInput.focus();
     logger.debug('All data cleared');
@@ -337,7 +349,41 @@ class BizCloserSidePanel {
   private displayReply(reply: string): void {
     this.elements.replyContent.textContent = reply;
     this.elements.replyOutput.classList.remove('hidden');
+    this.renderAssistantMeta();
     this.elements.copyBtn.focus();
+  }
+
+  private renderAssistantMeta(): void {
+    const summary = this.state.threadSummary.trim();
+    const angle = this.state.threadAngle.trim();
+    const confidence = this.state.threadConfidence.trim();
+    const meta = [summary, angle, confidence].filter(Boolean);
+
+    if (!meta.length) return;
+
+    const metaId = 'assistantMeta';
+    let el = document.getElementById(metaId);
+    if (!el) {
+      el = document.createElement('div');
+      el.id = metaId;
+      el.className = 'assistant-meta mt-3 rounded-xl border border-cyan-200/80 bg-cyan-50/70 p-3 text-xs text-slate-700';
+      this.elements.replyOutput.querySelector('.bg-white')?.appendChild(el);
+    }
+
+    el.innerHTML = [
+      summary ? `<div><span class="font-semibold text-slate-900">Read:</span> ${this.escapeHtml(summary)}</div>` : '',
+      angle ? `<div class="mt-1"><span class="font-semibold text-slate-900">Angle:</span> ${this.escapeHtml(angle)}</div>` : '',
+      confidence ? `<div class="mt-1"><span class="font-semibold text-slate-900">Confidence:</span> ${this.escapeHtml(confidence)}</div>` : ''
+    ].join('');
+  }
+
+  private escapeHtml(input: string): string {
+    return input
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   /**

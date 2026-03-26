@@ -14,7 +14,7 @@
                 PT Biz Lead Setter
             </div>
             <h1 class="text-xl font-semibold text-slate-900 text-center">BizCloser</h1>
-            <p class="text-sm text-slate-600 text-center mt-1">Compose replies from real conversations</p>
+            <p class="text-sm text-slate-600 text-center mt-1">AI-assisted replies from real conversations</p>
         </header>
 
         <main role="main">
@@ -26,14 +26,14 @@
                     <textarea
                         id="threadInput"
                         class="w-full h-48 p-3 border border-slate-300 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-colors"
-                        placeholder="Paste the full conversation thread here..."
+                        placeholder="Paste a thread, or highlight Aloware text and import it..."
                         aria-describedby="thread-help"
                         aria-required="true"
                         aria-invalid="false"
                         required
                     ></textarea>
                     <p id="thread-help" class="mt-1 text-xs text-slate-500" role="note">
-                        Include the full exchange for best results
+                        Highlighting selected text on the page works too
                     </p>
                 </div>
 
@@ -106,8 +106,8 @@
                 >
                     Copy Reply
                 </button>
-                <p id="copy-help" class="sr-only">Copy the generated reply to your clipboard</p>
-            </div>
+                    <p id="copy-help" class="sr-only">Copy the generated reply to your clipboard</p>
+                </div>
 
             <div id="emptyState" class="hidden text-center py-8">
                 <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-cyan-200 bg-slate-900 shadow-lg">

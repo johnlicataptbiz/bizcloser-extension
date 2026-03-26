@@ -22,14 +22,28 @@ function extractConversationFromPage(): string | null {
 
   const hostname = window.location.hostname.toLowerCase();
 
+  const selection = extractSelectedText();
+  if (selection) {
+    logger.debug('Using selected text for conversation extraction', { selectionLength: selection.length });
+    return selection;
+  }
+
   if (hostname.includes('slack.com')) {
     return extractFromSlack();
+  } else if (hostname.includes('aloware.com')) {
+    return extractFromAloware();
   } else if (hostname.includes('twilio.com')) {
     return extractFromTwilio();
   } else {
     logger.debug('Using generic extraction path for unsupported host', { hostname });
     return extractGenericConversation();
   }
+}
+
+function extractSelectedText(): string | null {
+  const selection = window.getSelection()?.toString() || '';
+  const normalized = normalizeMessageText(selection);
+  return normalized.length > 20 ? normalized : null;
 }
 
 /**
@@ -90,6 +104,37 @@ function extractFromTwilio(): string | null {
   logger.debug(`Twilio extraction found ${messages.length} messages`);
 
   return messages.length > 0 ? messages.join('\n\n') : null;
+}
+
+/**
+ * Extracts messages from Aloware's DOM.
+ * Aloware changes markup often, so we use broader selectors plus visible text filtering.
+ */
+function extractFromAloware(): string | null {
+  logger.debug('Attempting Aloware extraction');
+
+  const messageSelectors: MessageSelector[] = [
+    { selector: '[data-testid*="message"]' },
+    { selector: '[data-test-id*="message"]' },
+    { selector: '[class*="message"]' },
+    { selector: '[class*="Message"]' },
+    { selector: '[class*="thread"]' },
+    { selector: '[class*="Thread"]' },
+    { selector: '[class*="conversation"]' },
+    { selector: '[class*="Conversation"]' },
+    { selector: 'article' },
+    { selector: '[role="article"]' },
+    { selector: 'li' }
+  ];
+
+  const messages = extractMessages(messageSelectors, 'generic');
+  logger.debug(`Aloware extraction found ${messages.length} messages`);
+
+  if (messages.length > 0) return messages.join('\n\n');
+
+  // Fall back to visible text in the main viewport if selectors miss.
+  const bodyText = normalizeMessageText(document.body?.innerText || '');
+  return bodyText.length > 50 ? bodyText : null;
 }
 
 /**
@@ -224,7 +269,7 @@ chrome.runtime.onMessage.addListener((
         sendResponse({
           conversation: null,
           success: false,
-          error: 'No conversation found on this page. Try a supported thread view.'
+          error: 'No conversation found. If you are on Aloware, highlight the thread text first and click Import Conversation.'
         });
       }
     } catch (error) {
