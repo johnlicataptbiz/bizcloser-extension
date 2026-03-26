@@ -12,6 +12,7 @@ const API_ENDPOINTS = {
   refine: `${API_BASE_URL}/refine`,
   feedback: `${API_BASE_URL}/feedback`
 } as const;
+const HISTORY_ENDPOINT = `${API_BASE_URL}/history`;
 
 export async function handleAnalyzeConversation(thread: string): Promise<ConversationAnalysis> {
   try {
@@ -182,6 +183,46 @@ export async function handleRefineReply(
       throw new ExtensionError('Network error: Unable to connect to backend', 'NETWORK_ERROR');
     }
 
+    throw new ExtensionError(`Request failed: ${message}`, 'REQUEST_ERROR');
+  }
+}
+
+export async function handleSaveHistory(payload: {
+  thread: string;
+  reply: string;
+  analysis?: ConversationAnalysis;
+  metadata?: Record<string, unknown>;
+}): Promise<{ ok: true }> {
+  try {
+    const response = await fetch(HISTORY_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'BizCloser-Extension/1.0'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      throw new ExtensionError(
+        `Backend request failed: ${response.status} ${response.statusText}`,
+        'API_ERROR',
+        response.status
+      );
+    }
+
+    const data = await response.json() as { ok?: boolean };
+    if (data.ok !== true) {
+      throw new ExtensionError('History save was not accepted', 'INVALID_RESPONSE');
+    }
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ExtensionError) {
+      throw error;
+    }
+
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    logger.error('History save request failed', { error: message });
     throw new ExtensionError(`Request failed: ${message}`, 'REQUEST_ERROR');
   }
 }

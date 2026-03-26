@@ -169,7 +169,35 @@ class BizCloserSidePanel {
     history.unshift(payload);
     localStorage.setItem('bizcloser_history_v1', JSON.stringify(history.slice(0, 50)));
 
-    this.showToast('Saved for training, clearing for next lead.');
+    try {
+      await new Promise<void>((resolve, reject) => {
+        chrome.runtime.sendMessage({
+          action: 'saveHistory',
+          thread,
+          reply: this.state.currentReply,
+          analysis: this.state.analysis || undefined,
+          metadata: { source: 'save-next' }
+        }, (response: SubmitFeedbackResponse | undefined) => {
+          const err = chrome.runtime.lastError;
+          if (err) {
+            reject(new Error(err.message));
+            return;
+          }
+          if (response?.error) {
+            reject(new Error(response.error));
+            return;
+          }
+          resolve();
+        });
+      });
+      this.showToast('Saved for training, clearing for next lead.');
+    } catch (error) {
+      logger.warn('History save request failed locally, still clearing view', {
+        error: error instanceof Error ? error.message : 'unknown'
+      });
+      this.showToast('Saved locally; backend save failed.');
+    }
+
     this.clearAll();
   }
 

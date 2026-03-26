@@ -15,11 +15,18 @@ import {
   GenerateReplyResponse,
   RefineReplyMessage,
   RefineReplyResponse,
+  SaveHistoryMessage,
   SubmitFeedbackMessage,
   SubmitFeedbackResponse
 } from '../types/index';
 import { logger } from './logger';
-import { handleAnalyzeConversation, handleGenerateReply, handleRefineReply, handleSubmitFeedback } from './api';
+import {
+  handleAnalyzeConversation,
+  handleGenerateReply,
+  handleRefineReply,
+  handleSaveHistory,
+  handleSubmitFeedback
+} from './api';
 
 // Initialize side panel behavior
 chrome.sidePanel
@@ -186,7 +193,7 @@ async function extractVisibleThreadFromTab(tabId: number): Promise<string | null
 
 // Message listener for communication with side panel
 chrome.runtime.onMessage.addListener((
-  request: GenerateReplyMessage | AnalyzeConversationMessage | ExtractConversationMessage | RefineReplyMessage | SubmitFeedbackMessage,
+  request: GenerateReplyMessage | AnalyzeConversationMessage | ExtractConversationMessage | RefineReplyMessage | SubmitFeedbackMessage | SaveHistoryMessage,
   sender: chrome.runtime.MessageSender,
   sendResponse: (response: GenerateReplyResponse | AnalyzeConversationResponse | ExtractConversationResponse | RefineReplyResponse | SubmitFeedbackResponse) => void
 ): boolean => {
@@ -266,6 +273,25 @@ chrome.runtime.onMessage.addListener((
       })
       .catch((error: ExtensionError) => {
         logger.error('Feedback submission failed', { error: error.message });
+      sendResponse({ error: error.message });
+    });
+
+    return true;
+  }
+
+  if (request.action === 'saveHistory') {
+    handleSaveHistory({
+      thread: request.thread,
+      reply: request.reply,
+      analysis: request.analysis,
+      metadata: request.metadata
+    })
+      .then((data) => {
+        logger.info('History saved successfully');
+        sendResponse({ data });
+      })
+      .catch((error: ExtensionError) => {
+        logger.error('History save failed', { error: error.message });
         sendResponse({ error: error.message });
       });
 

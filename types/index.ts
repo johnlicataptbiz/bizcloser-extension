@@ -38,6 +38,14 @@ export interface ExtractConversationMessage extends ChromeMessage {
   action: 'extractConversation';
 }
 
+export interface SaveHistoryMessage extends ChromeMessage {
+  action: 'saveHistory';
+  thread: string;
+  reply: string;
+  analysis?: ConversationAnalysis;
+  metadata?: Record<string, unknown>;
+}
+
 export interface ConversationResponse {
   conversation: string | null;
   success: boolean;
