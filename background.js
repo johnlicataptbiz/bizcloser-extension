@@ -8,7 +8,6 @@ chrome.sidePanel
 // Listen for messages from the side panel
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'generateReply') {
-    // Handle generate reply request by proxying to the backend
     handleGenerateReply(request.thread, request.prompt)
       .then((data) => {
         sendResponse({ data: data });
@@ -29,7 +28,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
  */
 async function handleGenerateReply(thread, prompt) {
   try {
-    // Using the Vercel backend URL found in the user's local background.js
     const response = await fetch('https://bizcloser-backend-bdm6kz35v-jack-licatas-projects.vercel.app/api/bizcloser/generate', {
       method: 'POST',
       headers: {

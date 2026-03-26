@@ -1,108 +1,166 @@
 # BizCloser Chrome Extension
 
-A practical side panel extension for PT Biz lead setters. Users can paste a conversation thread and receive instant high-converting SMS replies that adhere strictly to PT Biz's proven messaging patterns.
+A Chrome extension that helps PT Biz lead setters turn real conversations into polished replies using AI. The extension provides a side panel for importing threads from supported platforms and generating responses through the backend.
 
 ## Features
 
-- **Side Panel Interface**: Clean, modern UI for conversation input and reply generation
-- **Smart Reply Generation**: AI-powered SMS reply generation using PT Biz's system prompt
-- **Copy to Clipboard**: One-click copying with success notification
-- **Reply History**: Automatically saves the last 5 generated replies using Chrome storage
-- **Auto-Scrape Skeleton**: Placeholder code for future automatic thread extraction from Slack and SMS dashboards
+- **Side Panel Interface**: Clean, accessible UI for conversation handling
+- **Conversation Import**: Pull threads from Slack and Twilio
+- **AI-Powered Reply Generation**: Generate polished SMS responses
+- **TypeScript**: Full type safety and modern development practices
+- **Accessibility**: WCAG compliant with proper ARIA labels and keyboard navigation
+- **Security**: Content Security Policy and secure API communication
+- **Performance**: Optimized bundle size and efficient async operations
 
-## Installation
+## Architecture
 
-1. **Download or Clone**: Ensure you have the extension files in a local directory.
+### Manifest V3 Compliance
+- Service Worker background script
+- Secure cross-origin communication
+- Content Security Policy implementation
 
-2. **Open Chrome Extensions**:
-   - Open Google Chrome
-   - Go to `chrome://extensions/`
-   - Enable "Developer mode" in the top right corner
+### Component Structure
+```
+src/
+├── background.ts      # Service worker for API proxying
+├── content.ts         # Content script for conversation extraction
+├── sidepanel.ts       # Main UI application
+├── api.ts            # Backend API client
+└── logger.ts         # Logging utility
 
-3. **Load Unpacked Extension**:
-   - Click "Load unpacked"
-   - Select the `apps/bizcloser-extension/` directory
-   - The extension should now appear in your extensions list
+types/
+└── index.ts          # TypeScript type definitions
 
-4. **Open Side Panel**:
-   - Navigate to any webpage
-   - Click the extensions icon (puzzle piece) in the toolbar
-   - Find "BizCloser" and click to open the side panel
-
-## Usage
-
-1. **Paste Conversation Thread**: Copy and paste the full SMS conversation thread into the large textarea.
-
-2. **Generate Reply**: Click the "Generate Smart Reply" button to send the thread to the backend API for processing.
-
-3. **Review Reply**: The generated SMS reply will appear in the output area.
-
-4. **Copy Reply**: Click "Copy to Clipboard" to copy the reply to your clipboard with a success toast notification.
-
-5. **Clear**: Use the "Clear" button to reset the input and output areas.
-
-## Backend Integration
-
-The extension communicates with a Node.js backend API running on `http://localhost:3000`. The backend:
-
-- Uses Postgres database to retrieve similar past booking examples
-- Applies the BizCloser system prompt for reply generation
-- Returns high-converting SMS replies
-
-### Setting up the Backend
-
-1. Navigate to the backend directory: `cd apps/bizcloser-backend/`
-2. Install dependencies: `npm install`
-3. Set up environment variables (see backend README)
-4. Start the server: `npm start`
-
-## Permissions
-
-The extension requires the following permissions:
-- `activeTab`: To interact with the current tab
-- `sidePanel`: To display the side panel interface
-- `storage`: To save reply history locally
-
-## Content Scripts
-
-The extension includes content scripts that run on:
-- Slack (`https://*.slack.com/*`)
-- Twilio dashboards (`https://app.twilio.com/*`, `https://dashboard.twilio.com/*`)
-
-These are currently placeholders for future auto-scraping functionality.
+test/
+├── logger.test.ts    # Unit tests
+└── setup.ts         # Test configuration
+```
 
 ## Development
 
-### File Structure
-```
-apps/bizcloser-extension/
-├── manifest.json          # Extension manifest
-├── sidepanel.html         # Side panel HTML
-├── sidepanel.css          # Custom styles
-├── sidepanel.js           # Main functionality
-├── content.js             # Content script skeleton
-└── README.md              # This file
+### Prerequisites
+- Node.js 18+
+- npm or yarn
+
+### Setup
+```bash
+# Install dependencies
+npm install
+
+# Development build with watch mode
+npm run dev
+
+# Production build
+npm run build
+
+# Type checking
+npm run type-check
+
+# Run tests
+npm test
 ```
 
-### Technologies Used
-- **Manifest V3**: Modern Chrome extension API
-- **Tailwind CSS**: Utility-first CSS framework
-- **Vanilla JavaScript**: No external dependencies for the extension
-- **Chrome Storage API**: For local data persistence
+### Building for Chrome
+1. Run `npm run build` to create the `dist/` folder
+2. Open Chrome and navigate to `chrome://extensions/`
+3. Enable "Developer mode"
+4. Click "Load unpacked" and select the `dist/` folder
+
+## Usage
+
+1. **Install the extension** following the build steps above
+2. **Open a supported platform** (Slack or Twilio) in a tab
+3. **Click the extension icon** to open the side panel
+4. **Import conversation** using the conversation button
+5. **Generate reply** by clicking "Generate Reply"
+6. **Copy the reply** and paste it into your messaging platform
+
+## Supported Platforms
+
+- **Slack**: `https://*.slack.com/*`
+- **Twilio**: `https://app.twilio.com/*`, `https://dashboard.twilio.com/*`
+
+## Security
+
+- **Content Security Policy**: Restricts script sources to prevent XSS
+- **Host Permissions**: Limited to necessary domains only
+- **API Communication**: All requests proxy through the background service worker
+- **Data Handling**: Reply state stays local to the active session
+
+## Accessibility
+
+- **WCAG 2.1 AA Compliance**: Proper ARIA labels, roles, and states
+- **Keyboard Navigation**: Full keyboard accessibility
+- **Screen Reader Support**: Semantic HTML and ARIA announcements
+- **Focus Management**: Logical tab order and focus indicators
+
+## Testing
+
+```bash
+# Run all tests
+npm test
+
+# Run tests with UI
+npm run test:ui
+
+# Run tests once (CI mode)
+npm run test:run
+```
+
+## API Integration
+
+The extension communicates with the BizCloser backend API:
+
+- **Endpoint**: `https://bizcloser-backend-bdm6kz35v-jack-licatas-projects.vercel.app/api/bizcloser/generate`
+- **Method**: POST
+- **Payload**: `{ thread: string }`
+- **Response**: `{ reply: string, ... }`
+
+The backend owns the system prompt and reply-generation policy, so the client only sends the conversation thread.
+
+## Development Guidelines
+
+### Code Style
+- **TypeScript**: Strict type checking enabled
+- **Functional Programming**: Prefer pure functions and immutability
+- **Error Handling**: Comprehensive try-catch with custom error types
+- **Logging**: Structured logging with context
+
+### Chrome Extension Best Practices
+- **Manifest V3**: Modern extension APIs only
+- **Permissions**: Principle of least privilege
+- **Performance**: Minimize background script activity
+- **Security**: Validate all inputs and sanitize outputs
 
 ## Troubleshooting
 
-- **Extension not loading**: Ensure all files are in the correct directory and try reloading the extension
-- **API connection failed**: Make sure the backend server is running on localhost:3000
-- **Side panel not opening**: Check that the extension is enabled and try refreshing the page
+### Common Issues
 
-## Future Enhancements
+**Extension not loading:**
+- Ensure you're loading the `dist/` folder, not the root
+- Check console for TypeScript compilation errors
 
-- Automatic thread extraction from supported platforms
-- Reply templates and customization options
-- Integration with additional SMS platforms
-- Advanced analytics and reply performance tracking
+**Conversation import fails:**
+- Verify you're on a supported platform
+- Check content script permissions in manifest.json
+
+**API requests fail:**
+- Confirm backend is running and accessible
+- Check network tab for CORS or connectivity issues
+
+### Debug Mode
+Set `NODE_ENV=development` for enhanced logging:
+```bash
+NODE_ENV=development npm run dev
+```
+
+## Contributing
+
+1. Follow the existing code style and architecture
+2. Add tests for new functionality
+3. Update documentation for API changes
+4. Ensure accessibility compliance
 
 ## License
 
-This project is proprietary to PT Biz.
+This project is part of the BizCloser application suite.

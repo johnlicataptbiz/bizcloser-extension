@@ -4,8 +4,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // DOM elements
     const threadForm = document.getElementById('threadForm');
     const threadInput = document.getElementById('threadInput');
+    const grabConvoBtn = document.getElementById('grabConvoBtn');
     const generateBtn = document.getElementById('generateBtn');
-    const importBtn = document.getElementById('importBtn');
+    const grabConvoBtn = document.getElementById('grabConvoBtn');
     const loading = document.getElementById('loading');
     const errorState = document.getElementById('errorState');
     const errorMessage = document.getElementById('errorMessage');
@@ -188,7 +189,7 @@ Keep it sounding like a real person mid conversation.`;
         threadForm.addEventListener('submit', handleFormSubmit);
 
         // Button clicks
-        importBtn.addEventListener('click', handleImportClick);
+        grabConvoBtn.addEventListener('click', handleGrabConvoClick);
         copyBtn.addEventListener('click', handleCopyClick);
         clearBtn.addEventListener('click', handleClearClick);
         retryBtn.addEventListener('click', handleRetryClick);
@@ -228,44 +229,28 @@ Keep it sounding like a real person mid conversation.`;
         hideErrorState();
 
         try {
-            // Send message to background script to handle the API call
-            // This avoids CORS issues and follows Manifest V3 best practices
-            chrome.runtime.sendMessage({
+            const response = await chrome.runtime.sendMessage({
                 action: 'generateReply',
                 thread: thread,
                 prompt: bizCloserPrompt
-            }, async (response) => {
-                if (chrome.runtime.lastError) {
-                    showError('Communication error: ' + chrome.runtime.lastError.message);
-                    updateUIState('error');
-                    isGenerating = false;
-                    return;
-                }
-
-                if (response.error) {
-                    showError(response.error);
-                    updateUIState('error');
-                    isGenerating = false;
-                    return;
-                }
-
-                const data = response.data;
-                if (!data || !data.reply) {
-                    showError('No reply generated');
-                    updateUIState('error');
-                    isGenerating = false;
-                    return;
-                }
-
-                currentReply = data.reply;
-                displayReply(data.reply);
-                updateUIState('success');
-
-                // Save to storage
-                await saveReply(data.reply);
-                isGenerating = false;
             });
 
+            if (response.error) {
+                throw new Error(response.error);
+            }
+
+            const data = response.data;
+
+            if (!data.reply) {
+                throw new Error('No reply generated');
+            }
+
+            currentReply = data.reply;
+            displayReply(data.reply);
+            updateUIState('success');
+
+            // Save to storage
+            await saveReply(data.reply);
         } catch (error) {
             console.error('Generation error:', error);
             const message = error.message || 'Failed to generate reply. Please try again.';
@@ -331,127 +316,46 @@ Keep it sounding like a real person mid conversation.`;
         }
     }
 
-    async function handleImportClick() {
-        importBtn.disabled = true;
-        const originalButtonText = importBtn.textContent;
-        importBtn.textContent = 'Importing...';
+    async function handleGrabConvoClick() {
+        if (isGenerating) return;
 
         try {
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            
-            if (!tab.url || !tab.url.match(/^https?:\/\//)) {
-                throw new Error('Cannot access current tab');
-            }
+            // Get the active tab
+            // BUG FIX: currentWindow:true targets the side panel's own window,
+            // not the browser window with the page. lastFocusedWindow:true
+            // correctly targets the last focused browser window.
+            const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
 
-            // First check if there's highlighted text
-            const result = await chrome.scripting.executeScript({
-                target: { tabId: tab.id },
-                func: getSelectedText
-            });
-
-            const selectedText = result[0].result;
-            if (selectedText && selectedText.trim() !== '') {
-                threadInput.value = selectedText.trim();
-                updateToast('Imported selected text');
+            if (!tab) {
+                showError('No active tab found');
                 return;
             }
 
-            // Check if the content script has thread extraction ability
-            // First try to get conversation from content script if it exists
-            chrome.tabs.sendMessage(
-                tab.id,
-                { action: 'getConversationThread' },
-                (response) => {
-                    if (chrome.runtime.lastError) {
-                        // If content script isn't available for this URL, try common selectors
-                        const fallbackResult = chrome.scripting.executeScript({
-                            target: { tabId: tab.id },
-                            func: extractFallbackThread
-                        }).then(fallbackResponse => {
-                            const thread = fallbackResponse[0]?.result || 'No conversation thread detected on this page.';
-                            threadInput.value = thread;
-                            updateToast('Imported conversation');
-                        }).catch(() => {
-                            threadInput.value = 'Could not extract conversation from this page. Select text manually.';
-                            updateToast('Import failed - Please select text to import');
-                        });
-                    } else if (response?.thread) {
-                        threadInput.value = response.thread;
-                        updateToast('Imported conversation');
-                    } else {
-                        threadInput.value = 'No conversation thread detected on this page.';
-                        updateToast('No conversation detected');
-                    }
-                }
-            );
+            // Send message to content script to extract conversation
+            const response = await chrome.tabs.sendMessage(tab.id, { action: 'extractConversation' });
+
+            if (response && response.conversation) {
+                // Paste conversation into textarea
+                threadInput.value = response.conversation;
+                threadInput.dispatchEvent(new Event('input')); // Trigger input validation
+
+                // Show success message
+                showToast('Conversation extracted successfully!');
+
+                // Automatically submit the form
+                // BUG FIX: Event must include { bubbles: true, cancelable: true }
+                // so the form's submit listener fires and e.preventDefault() works.
+                setTimeout(() => {
+                    threadForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+                }, 500);
+            } else {
+                showError('No conversation found on this page. Make sure you\'re on a supported messaging platform.');
+            }
         } catch (error) {
-            console.error('Import error:', error);
-            threadInput.value = 'Import failed: ' + error.message;
-            updateToast('Import failed - Check console for details');
-        } finally {
-            setTimeout(() => {
-                importBtn.disabled = false;
-                importBtn.textContent = originalButtonText;
-            }, 1000);
+            console.error('Grab conversation error:', error);
+            showError('Failed to extract conversation. Please check that you\'re on a supported messaging platform.');
         }
     }
-
-    // Helper functions for content extraction
-    function getSelectedText() {
-        return window.getSelection().toString();
-    }
-
-    function extractFallbackThread() {
-        // Common selectors for conversation threads on various platforms
-        let conversationText = '';
-
-        // Try to find common conversation/communication containers
-        const selectors = [
-            '[data-testid*="conversation"]',
-            '[data-testid*="thread"]',
-            '[class*="conversation"]',
-            '[class*="thread"]',
-            '[class*="chat"]',
-            '[class*="message"]',
-            '.communication-container',
-            '.msg-content',
-            '.messagelist',
-            '[role="log"]'
-        ];
-
-        for (const selector of selectors) {
-            const elements = document.querySelectorAll(selector);
-            if (elements.length > 0) {
-                const texts = Array.from(elements).map(el => el.innerText).filter(Boolean);
-                if (texts.length > 0) {
-                    conversationText = texts.join('\n\n');
-                    break;
-                }
-            }
-        }
-
-        if (!conversationText) {
-            // Last resort: try to grab all text content that looks like a conversation
-            const allElements = document.querySelectorAll('div, p, span, li');
-            const potentialConversation = Array.from(allElements)
-                .filter(element => {
-                    const text = element.innerText;
-                    return text.length > 30 && 
-                           (text.includes(':') || text.includes('\n')) &&
-                           text.split('\n').length >= 2;
-                })
-                .slice(0, 10)
-                .map(el => el.innerText)
-                .join('\n\n');
-                
-            if (potentialConversation.length > 50) {
-                conversationText = potentialConversation;
-            }
-        }
-
-        return conversationText.substring(0, 2000); // Limit to prevent huge text
-    }
-
     function handleInputChange() {
         const hasContent = threadInput.value.trim().length > 0;
         generateBtn.disabled = !hasContent || isGenerating;
@@ -513,6 +417,9 @@ Keep it sounding like a real person mid conversation.`;
 
         setTimeout(() => {
             toast.classList.remove('show');
+            // BUG FIX: clear text after the CSS transition (300 ms) so screen
+            // readers do not re-announce stale content on the next invocation.
+            setTimeout(() => { toast.textContent = ''; }, 300);
         }, 3000);
     }
 
