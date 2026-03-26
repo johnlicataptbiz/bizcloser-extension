@@ -3,16 +3,22 @@
   "name": "BizCloser",
   "version": "1.0",
   "description": "A side panel extension for PT Biz lead setters to generate high-converting SMS replies.",
-  "permissions": ["activeTab", "sidePanel", "storage"],
+  "permissions": ["activeTab", "sidePanel", "storage", "scripting"],
   "side_panel": {
     "default_path": "sidepanel.html"
   },
   "action": {
     "default_title": "Open BizCloser Side Panel"
   },
+  "host_permissions": [
+    "https://*.aloware.io/*",
+    "https://*.slack.com/*",
+    "https://app.twilio.com/*",
+    "https://dashboard.twilio.com/*"
+  ],
   "content_scripts": [
     {
-      "matches": ["https://*.slack.com/*", "https://app.twilio.com/*", "https://dashboard.twilio.com/*"],
+      "matches": ["https://*.slack.com/*", "https://app.twilio.com/*", "https://dashboard.twilio.com/*", "https://*.aloware.io/*"],
       "js": ["content.js"]
     }
   ]
