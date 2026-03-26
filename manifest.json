@@ -43,7 +43,9 @@
         "https://*.slack.com/*",
         "https://app.twilio.com/*",
         "https://dashboard.twilio.com/*",
-        "https://*.aloware.io/*"
+        "https://*.aloware.io/*",
+        "https://talk.aloware.com/*",
+        "https://*.aloware.com/*"
       ],
       "js": ["dist/content.js"],
       "run_at": "document_idle"

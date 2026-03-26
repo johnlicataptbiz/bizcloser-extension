@@ -2,13 +2,62 @@
  * API client for BizCloser backend communication
  */
 
-import { BackendResponse, ExtensionError } from '../types/index';
+import { BackendResponse, ConversationAnalysis, ExtensionError } from '../types/index';
 import { logger } from './logger';
 
-const API_BASE_URL = 'https://bizcloser-backend-dmhhunuga-jack-licatas-projects.vercel.app/api/bizcloser';
+const API_BASE_URL = 'https://bizcloser-backend.vercel.app/api/bizcloser';
 const API_ENDPOINTS = {
+  analyze: `${API_BASE_URL}/analyze`,
   generate: `${API_BASE_URL}/generate`
 } as const;
+
+export async function handleAnalyzeConversation(thread: string): Promise<ConversationAnalysis> {
+  try {
+    logger.debug('Making API request to analyze conversation', {
+      threadLength: thread.length
+    });
+
+    const response = await fetch(API_ENDPOINTS.analyze, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'BizCloser-Extension/1.0'
+      },
+      body: JSON.stringify({
+        thread: thread.trim()
+      })
+    });
+
+    if (!response.ok) {
+      throw new ExtensionError(
+        `Backend request failed: ${response.status} ${response.statusText}`,
+        'API_ERROR',
+        response.status
+      );
+    }
+
+    const data: ConversationAnalysis = await response.json();
+
+    if (!data.intent || !Array.isArray(data.objections) || !data.recommendedAngle) {
+      throw new ExtensionError('Invalid analysis response format', 'INVALID_RESPONSE');
+    }
+
+    return data;
+  } catch (error) {
+    if (error instanceof ExtensionError) {
+      throw error;
+    }
+
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    logger.error('Analysis request failed', { error: message });
+
+    if (error instanceof TypeError && message.includes('fetch')) {
+      throw new ExtensionError('Network error: Unable to connect to backend', 'NETWORK_ERROR');
+    }
+
+    throw new ExtensionError(`Request failed: ${message}`, 'REQUEST_ERROR');
+  }
+}
 
 /**
  * Generates a reply using the BizCloser backend

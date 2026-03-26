@@ -113,7 +113,11 @@ function extractFromTwilio(): string | null {
 function extractFromAloware(): string | null {
   logger.debug('Attempting Aloware extraction');
 
+  const conversationRoot = findAlowareConversationRoot();
+
   const messageSelectors: MessageSelector[] = [
+    { selector: '[class*="bubble"]' },
+    { selector: '[class*="Bubble"]' },
     { selector: '[data-testid*="message"]' },
     { selector: '[data-test-id*="message"]' },
     { selector: '[class*="message"]' },
@@ -127,13 +131,12 @@ function extractFromAloware(): string | null {
     { selector: 'li' }
   ];
 
-  const messages = extractMessages(messageSelectors, 'generic');
+  const messages = extractMessages(messageSelectors, 'aloware', conversationRoot || document);
   logger.debug(`Aloware extraction found ${messages.length} messages`);
 
   if (messages.length > 0) return messages.join('\n\n');
 
-  // Fall back to visible text in the main viewport if selectors miss.
-  const bodyText = normalizeMessageText(document.body?.innerText || '');
+  const bodyText = cleanAlowareText((conversationRoot || document.body)?.innerText || '');
   return bodyText.length > 50 ? bodyText : null;
 }
 
@@ -165,13 +168,17 @@ function extractGenericConversation(): string | null {
  * @param selectors - Array of selectors to try
  * @returns Array of extracted message texts
  */
-function extractMessages(selectors: MessageSelector[], source: 'slack' | 'twilio' | 'generic'): string[] {
+function extractMessages(
+  selectors: MessageSelector[],
+  source: 'slack' | 'twilio' | 'aloware' | 'generic',
+  root: ParentNode = document
+): string[] {
   const messages: string[] = [];
   const seenTexts = new Set<string>();
 
   for (const { selector, textExtractor } of selectors) {
     try {
-      const elements = document.querySelectorAll(selector);
+      const elements = root.querySelectorAll(selector);
       logger.debug(`Selector "${selector}" found ${elements.length} elements`);
 
       elements.forEach((element) => {
@@ -205,7 +212,7 @@ function extractMessages(selectors: MessageSelector[], source: 'slack' | 'twilio
 /**
  * Extracts the most useful text from a node, with platform-specific cleanup.
  */
-function extractNodeText(element: HTMLElement, source: 'slack' | 'twilio' | 'generic'): string {
+function extractNodeText(element: HTMLElement, source: 'slack' | 'twilio' | 'aloware' | 'generic'): string {
   const candidates: string[] = [];
 
   switch (source) {
@@ -225,12 +232,70 @@ function extractNodeText(element: HTMLElement, source: 'slack' | 'twilio' | 'gen
         element.innerText || '',
       );
       break;
+    case 'aloware':
+      candidates.push(
+        element.querySelector('[class*="bubble"]')?.textContent || '',
+        element.querySelector('[class*="message"]')?.textContent || '',
+        element.querySelector('[class*="Message"]')?.textContent || '',
+        element.innerText || '',
+      );
+      break;
     default:
       candidates.push(element.innerText || element.textContent || '');
       break;
   }
 
-  return normalizeMessageText(candidates.find(Boolean) || '');
+  const text = normalizeMessageText(candidates.find(Boolean) || '');
+  return source === 'aloware' ? cleanAlowareText(text) : text;
+}
+
+function findAlowareConversationRoot(): HTMLElement | null {
+  const composerCandidates = Array.from(document.querySelectorAll('textarea, input, [contenteditable="true"]')) as HTMLElement[];
+  const composer = composerCandidates.find((element) =>
+    /type your message/i.test(element.getAttribute('placeholder') || '') ||
+    /type your message/i.test(element.getAttribute('aria-label') || '')
+  );
+
+  if (!composer) return null;
+
+  let current: HTMLElement | null = composer.parentElement;
+  while (current) {
+    const text = normalizeMessageText(current.innerText || '');
+    if (text.includes('Type your message') && /Sent from|Sequence|Yesterday|Today/.test(text)) {
+      return current;
+    }
+    current = current.parentElement;
+  }
+
+  return null;
+}
+
+function cleanAlowareText(text: string): string {
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !isAlowareNoise(line));
+
+  return normalizeMessageText(lines.join('\n'));
+}
+
+function isAlowareNoise(line: string): boolean {
+  return (
+    /^(Text|Fax|Email|Note|Send Text)$/i.test(line) ||
+    /^Type your message$/i.test(line) ||
+    /^Sent from /i.test(line) ||
+    /^used .* personal line /i.test(line) ||
+    /^to \+?\d+/i.test(line) ||
+    /^from:/i.test(line) ||
+    /^to:/i.test(line) ||
+    /^primary$/i.test(line) ||
+    /^sequence$/i.test(line) ||
+    /^(Yesterday|Today), \d{1,2}:\d{2}\s?(AM|PM)/i.test(line) ||
+    /\bSequence\b/i.test(line) ||
+    /\bEDT\b/i.test(line) ||
+    /^\+?\d{10,}$/.test(line)
+  );
 }
 
 /**

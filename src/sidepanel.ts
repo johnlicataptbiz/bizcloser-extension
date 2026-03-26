@@ -3,7 +3,14 @@
  * Handles UI interactions and reply generation
  */
 
-import { UIState, ExtensionError, GenerateReplyResponse } from '../types/index';
+import {
+  AnalyzeConversationResponse,
+  ConversationAnalysis,
+  ExtensionError,
+  ExtractConversationResponse,
+  GenerateReplyResponse,
+  UIState
+} from '../types/index';
 import { logger } from './logger';
 
 // DOM element references
@@ -11,7 +18,15 @@ interface DOMElements {
   threadForm: HTMLFormElement;
   threadInput: HTMLTextAreaElement;
   grabConvoBtn: HTMLButtonElement;
+  analyzeBtn: HTMLButtonElement;
   generateBtn: HTMLButtonElement;
+  analysisPanel: HTMLElement;
+  analysisLoading: HTMLElement;
+  analysisSummary: HTMLElement;
+  analysisIntent: HTMLElement;
+  analysisAngle: HTMLElement;
+  analysisObjections: HTMLElement;
+  analysisConfidence: HTMLElement;
   loading: HTMLElement;
   errorState: HTMLElement;
   errorMessage: HTMLElement;
@@ -27,10 +42,9 @@ interface DOMElements {
 // State management
 interface AppState {
   currentReply: string;
-  threadSummary: string;
-  threadAngle: string;
-  threadConfidence: string;
+  analysis: ConversationAnalysis | null;
   isGenerating: boolean;
+  isAnalyzing: boolean;
   uiState: UIState;
 }
 
@@ -40,14 +54,14 @@ interface AppState {
 class BizCloserSidePanel {
   private elements: DOMElements;
   private state: AppState;
+  private analysisTimer: number | null = null;
 
   constructor() {
     this.state = {
       currentReply: '',
-      threadSummary: '',
-      threadAngle: '',
-      threadConfidence: '',
+      analysis: null,
       isGenerating: false,
+      isAnalyzing: false,
       uiState: 'empty'
     };
 
@@ -74,7 +88,15 @@ class BizCloserSidePanel {
       threadForm: getElement<HTMLFormElement>('threadForm'),
       threadInput: getElement<HTMLTextAreaElement>('threadInput'),
       grabConvoBtn: getElement<HTMLButtonElement>('grabConvoBtn'),
+      analyzeBtn: getElement<HTMLButtonElement>('analyzeBtn'),
       generateBtn: getElement<HTMLButtonElement>('generateBtn'),
+      analysisPanel: getElement('analysisPanel'),
+      analysisLoading: getElement('analysisLoading'),
+      analysisSummary: getElement('analysisSummary'),
+      analysisIntent: getElement('analysisIntent'),
+      analysisAngle: getElement('analysisAngle'),
+      analysisObjections: getElement('analysisObjections'),
+      analysisConfidence: getElement('analysisConfidence'),
       loading: getElement('loading'),
       errorState: getElement('errorState'),
       errorMessage: getElement('errorMessage'),
@@ -97,6 +119,7 @@ class BizCloserSidePanel {
 
     // Button clicks
     this.elements.grabConvoBtn.addEventListener('click', () => this.handleGrabConvoClick());
+    this.elements.analyzeBtn.addEventListener('click', () => this.handleAnalyzeClick());
     this.elements.copyBtn.addEventListener('click', () => this.handleCopyClick());
     this.elements.clearBtn.addEventListener('click', () => this.clearAll());
     this.elements.retryBtn.addEventListener('click', () => this.retryGeneration());
@@ -139,6 +162,10 @@ class BizCloserSidePanel {
    * Generate reply using background script
    */
   private async generateReply(thread: string): Promise<void> {
+    if (!this.state.analysis) {
+      await this.analyzeConversation(thread);
+    }
+
     this.state.isGenerating = true;
     this.updateUIState('loading');
     this.hideErrorState();
@@ -163,9 +190,6 @@ class BizCloserSidePanel {
       }
 
       this.state.currentReply = data.reply;
-      this.state.threadSummary = data.summary || '';
-      this.state.threadAngle = data.angle || '';
-      this.state.threadConfidence = data.confidence || '';
       this.displayReply(data.reply);
       this.updateUIState('success');
 
@@ -181,6 +205,53 @@ class BizCloserSidePanel {
     }
   }
 
+  private async handleAnalyzeClick(): Promise<void> {
+    const thread = this.elements.threadInput.value.trim();
+    if (!thread || this.state.isAnalyzing) return;
+    await this.analyzeConversation(thread);
+  }
+
+  private async analyzeConversation(thread: string): Promise<void> {
+    this.state.isAnalyzing = true;
+    this.elements.analysisLoading.classList.remove('hidden');
+    this.elements.analysisPanel.classList.add('hidden');
+
+    try {
+      logger.debug('Sending analysis request to background', {
+        threadLength: thread.length
+      });
+
+      const response: AnalyzeConversationResponse = await chrome.runtime.sendMessage({
+        action: 'analyzeConversation',
+        thread
+      });
+
+      if (response.error) {
+        throw new ExtensionError(response.error);
+      }
+
+      if (!response.data) {
+        throw new ExtensionError('No analysis returned');
+      }
+
+      if (this.elements.threadInput.value.trim() !== thread) {
+        logger.debug('Discarding stale analysis result after thread changed');
+        return;
+      }
+
+      this.state.analysis = response.data;
+      this.renderAnalysis(response.data);
+      logger.info('Conversation analysis displayed successfully');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to analyze conversation.';
+      logger.error('Analysis error', { error: message });
+      this.showError(message);
+    } finally {
+      this.state.isAnalyzing = false;
+      this.elements.analysisLoading.classList.add('hidden');
+    }
+  }
+
   /**
    * Handle grab conversation button click
    */
@@ -188,42 +259,28 @@ class BizCloserSidePanel {
     if (this.state.isGenerating) return;
 
     try {
-      logger.debug('Attempting to grab conversation from active tab');
-      this.showToast('Importing thread...');
+      logger.debug('Attempting to import conversation from active tab');
+      this.showToast('Importing highlighted or visible thread...');
 
-      // Get the active tab
-      const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      const response: ExtractConversationResponse = await chrome.runtime.sendMessage({
+        action: 'extractConversation'
+      });
 
-      if (!tab) {
-        throw new ExtensionError('No active tab found');
-      }
-
-      if (!tab.id) {
-        throw new ExtensionError('Tab has no ID');
-      }
-
-      // Send message to content script to extract conversation
-      const response = await chrome.tabs.sendMessage(tab.id, { action: 'extractConversation' });
-
-      if (response && response.conversation) {
+      if (response?.conversation) {
         // Paste conversation into textarea
         this.elements.threadInput.value = response.conversation;
         this.elements.threadInput.dispatchEvent(new Event('input')); // Trigger input validation
 
         // Show success message
         this.showToast('Thread imported successfully!');
+        await this.analyzeConversation(response.conversation);
 
-        // Automatically submit the form
-        setTimeout(() => {
-          this.elements.threadForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-        }, 500);
-
-        logger.info('Conversation extracted and form submitted');
+        logger.info('Conversation extracted and analyzed');
       } else {
-        throw new ExtensionError('No conversation found on this page. Make sure you\'re on a supported messaging platform.');
+        throw new ExtensionError(response?.error || 'No conversation found on this page. Highlight the thread first and try again.');
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to extract conversation. Please check that you\'re on a supported messaging platform.';
+      const message = error instanceof Error ? error.message : 'Failed to extract conversation. Highlight the thread first and try again.';
       logger.error('Grab conversation error', { error: message });
       this.showError(message);
       this.showToast('Thread import failed');
@@ -277,23 +334,53 @@ class BizCloserSidePanel {
    */
   private handleInputChange(): void {
     const hasContent = this.elements.threadInput.value.trim().length > 0;
-    this.elements.generateBtn.disabled = !hasContent || this.state.isGenerating;
+    this.elements.generateBtn.disabled = !hasContent || this.state.isGenerating || this.state.isAnalyzing;
+    this.elements.analyzeBtn.disabled = !hasContent || this.state.isAnalyzing || this.state.isGenerating;
+
+    if (hasContent) {
+      this.state.currentReply = '';
+      this.state.analysis = null;
+      this.elements.replyOutput.classList.add('hidden');
+      this.elements.analysisPanel.classList.add('hidden');
+      this.scheduleAnalysis(this.elements.threadInput.value.trim());
+    }
 
     if (!hasContent && !this.state.currentReply) {
+      if (this.analysisTimer !== null) {
+        window.clearTimeout(this.analysisTimer);
+        this.analysisTimer = null;
+      }
       this.updateUIState('empty');
     }
+  }
+
+  private scheduleAnalysis(thread: string): void {
+    if (this.analysisTimer !== null) {
+      window.clearTimeout(this.analysisTimer);
+    }
+
+    if (thread.length < 25) return;
+
+    this.analysisTimer = window.setTimeout(() => {
+      this.analysisTimer = null;
+      void this.analyzeConversation(thread);
+    }, 500);
   }
 
   /**
    * Clear all data
    */
   private clearAll(): void {
+    if (this.analysisTimer !== null) {
+      window.clearTimeout(this.analysisTimer);
+      this.analysisTimer = null;
+    }
     this.elements.threadInput.value = '';
     this.state.currentReply = '';
-    this.state.threadSummary = '';
-    this.state.threadAngle = '';
-    this.state.threadConfidence = '';
+    this.state.analysis = null;
     this.updateUIState('empty');
+    this.elements.analysisPanel.classList.add('hidden');
+    this.elements.analysisLoading.classList.add('hidden');
     this.elements.threadInput.focus();
     logger.debug('All data cleared');
   }
@@ -327,18 +414,22 @@ class BizCloserSidePanel {
       case 'loading':
         this.elements.loading.classList.remove('hidden');
         this.elements.generateBtn.disabled = true;
+        this.elements.analyzeBtn.disabled = true;
         break;
       case 'error':
         this.elements.errorState.classList.remove('hidden');
         this.elements.generateBtn.disabled = false;
+        this.elements.analyzeBtn.disabled = false;
         break;
       case 'success':
         this.elements.replyOutput.classList.remove('hidden');
         this.elements.generateBtn.disabled = false;
+        this.elements.analyzeBtn.disabled = false;
         break;
       case 'empty':
       default:
         this.elements.emptyState.classList.remove('hidden');
+        this.elements.analyzeBtn.disabled = true;
         break;
     }
   }
@@ -349,41 +440,28 @@ class BizCloserSidePanel {
   private displayReply(reply: string): void {
     this.elements.replyContent.textContent = reply;
     this.elements.replyOutput.classList.remove('hidden');
-    this.renderAssistantMeta();
     this.elements.copyBtn.focus();
   }
 
-  private renderAssistantMeta(): void {
-    const summary = this.state.threadSummary.trim();
-    const angle = this.state.threadAngle.trim();
-    const confidence = this.state.threadConfidence.trim();
-    const meta = [summary, angle, confidence].filter(Boolean);
+  private renderAnalysis(analysis: ConversationAnalysis): void {
+    this.elements.analysisSummary.textContent = analysis.summary;
+    this.elements.analysisIntent.textContent = analysis.intent;
+    this.elements.analysisAngle.textContent = analysis.recommendedAngle;
+    this.elements.analysisConfidence.textContent = analysis.confidence;
+    this.elements.analysisObjections.innerHTML = '';
 
-    if (!meta.length) return;
+    const objections = analysis.objections.length > 0
+      ? analysis.objections
+      : ['No explicit objection stated yet.'];
 
-    const metaId = 'assistantMeta';
-    let el = document.getElementById(metaId);
-    if (!el) {
-      el = document.createElement('div');
-      el.id = metaId;
-      el.className = 'assistant-meta mt-3 rounded-xl border border-cyan-200/80 bg-cyan-50/70 p-3 text-xs text-slate-700';
-      this.elements.replyOutput.querySelector('.bg-white')?.appendChild(el);
-    }
+    objections.forEach((objection) => {
+      const item = document.createElement('li');
+      item.className = 'analysis-list__item';
+      item.textContent = objection;
+      this.elements.analysisObjections.appendChild(item);
+    });
 
-    el.innerHTML = [
-      summary ? `<div><span class="font-semibold text-slate-900">Read:</span> ${this.escapeHtml(summary)}</div>` : '',
-      angle ? `<div class="mt-1"><span class="font-semibold text-slate-900">Angle:</span> ${this.escapeHtml(angle)}</div>` : '',
-      confidence ? `<div class="mt-1"><span class="font-semibold text-slate-900">Confidence:</span> ${this.escapeHtml(confidence)}</div>` : ''
-    ].join('');
-  }
-
-  private escapeHtml(input: string): string {
-    return input
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+    this.elements.analysisPanel.classList.remove('hidden');
   }
 
   /**

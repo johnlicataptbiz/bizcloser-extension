@@ -7,7 +7,11 @@ export interface ChromeMessage {
 export interface GenerateReplyMessage extends ChromeMessage {
   action: 'generateReply';
   thread: string;
-  prompt: string;
+}
+
+export interface AnalyzeConversationMessage extends ChromeMessage {
+  action: 'analyzeConversation';
+  thread: string;
 }
 
 export interface ExtractConversationMessage extends ChromeMessage {
@@ -20,11 +24,29 @@ export interface ConversationResponse {
   error?: string;
 }
 
+export interface ExtractConversationResponse {
+  conversation: string | null;
+  error?: string;
+}
+
 export interface GenerateReplyResponse {
   data?: {
     reply: string;
     [key: string]: any;
   };
+  error?: string;
+}
+
+export interface ConversationAnalysis {
+  summary: string;
+  intent: string;
+  objections: string[];
+  recommendedAngle: string;
+  confidence: string;
+}
+
+export interface AnalyzeConversationResponse {
+  data?: ConversationAnalysis;
   error?: string;
 }
 
