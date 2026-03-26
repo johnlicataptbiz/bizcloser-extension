@@ -5,7 +5,7 @@
 import { BackendResponse, ExtensionError } from '../types/index';
 import { logger } from './logger';
 
-const API_BASE_URL = 'https://bizcloser-backend-bdm6kz35v-jack-licatas-projects.vercel.app/api/bizcloser';
+const API_BASE_URL = 'https://bizcloser-backend-dmhhunuga-jack-licatas-projects.vercel.app/api/bizcloser';
 const API_ENDPOINTS = {
   generate: `${API_BASE_URL}/generate`
 } as const;

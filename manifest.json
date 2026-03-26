@@ -13,6 +13,7 @@
   "host_permissions": [
     "http://localhost:3000/*",
     "https://bizcloser-backend-bdm6kz35v-jack-licatas-projects.vercel.app/*",
+    "https://bizcloser-backend-dmhhunuga-jack-licatas-projects.vercel.app/*",
     "https://*.aloware.io/*",
     "https://*.slack.com/*",
     "https://app.twilio.com/*",

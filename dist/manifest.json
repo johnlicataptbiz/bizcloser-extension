@@ -10,7 +10,7 @@
     "128": "assets/icons/icon128.png"
   },
   "permissions": ["activeTab", "sidePanel", "storage", "tabs"],
-  "host_permissions": ["http://localhost:3000/*", "https://bizcloser-backend-bdm6kz35v-jack-licatas-projects.vercel.app/*"],
+  "host_permissions": ["http://localhost:3000/*", "https://bizcloser-backend-dmhhunuga-jack-licatas-projects.vercel.app/*"],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"
   },
