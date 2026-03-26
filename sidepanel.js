@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const threadForm = document.getElementById('threadForm');
     const threadInput = document.getElementById('threadInput');
     const generateBtn = document.getElementById('generateBtn');
+    const importBtn = document.getElementById('importBtn');
     const loading = document.getElementById('loading');
     const errorState = document.getElementById('errorState');
     const errorMessage = document.getElementById('errorMessage');
@@ -187,6 +188,7 @@ Keep it sounding like a real person mid conversation.`;
         threadForm.addEventListener('submit', handleFormSubmit);
 
         // Button clicks
+        importBtn.addEventListener('click', handleImportClick);
         copyBtn.addEventListener('click', handleCopyClick);
         clearBtn.addEventListener('click', handleClearClick);
         retryBtn.addEventListener('click', handleRetryClick);
@@ -321,6 +323,127 @@ Keep it sounding like a real person mid conversation.`;
         }
     }
 
+    async function handleImportClick() {
+        importBtn.disabled = true;
+        const originalButtonText = importBtn.textContent;
+        importBtn.textContent = 'Importing...';
+
+        try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            
+            if (!tab.url || !tab.url.match(/^https?:\/\//)) {
+                throw new Error('Cannot access current tab');
+            }
+
+            // First check if there's highlighted text
+            const result = await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: getSelectedText
+            });
+
+            const selectedText = result[0].result;
+            if (selectedText && selectedText.trim() !== '') {
+                threadInput.value = selectedText.trim();
+                updateToast('Imported selected text');
+                return;
+            }
+
+            // Check if the content script has thread extraction ability
+            // First try to get conversation from content script if it exists
+            chrome.tabs.sendMessage(
+                tab.id,
+                { action: 'getConversationThread' },
+                (response) => {
+                    if (chrome.runtime.lastError) {
+                        // If content script isn't available for this URL, try common selectors
+                        const fallbackResult = chrome.scripting.executeScript({
+                            target: { tabId: tab.id },
+                            func: extractFallbackThread
+                        }).then(fallbackResponse => {
+                            const thread = fallbackResponse[0]?.result || 'No conversation thread detected on this page.';
+                            threadInput.value = thread;
+                            updateToast('Imported conversation');
+                        }).catch(() => {
+                            threadInput.value = 'Could not extract conversation from this page. Select text manually.';
+                            updateToast('Import failed - Please select text to import');
+                        });
+                    } else if (response?.thread) {
+                        threadInput.value = response.thread;
+                        updateToast('Imported conversation');
+                    } else {
+                        threadInput.value = 'No conversation thread detected on this page.';
+                        updateToast('No conversation detected');
+                    }
+                }
+            );
+        } catch (error) {
+            console.error('Import error:', error);
+            threadInput.value = 'Import failed: ' + error.message;
+            updateToast('Import failed - Check console for details');
+        } finally {
+            setTimeout(() => {
+                importBtn.disabled = false;
+                importBtn.textContent = originalButtonText;
+            }, 1000);
+        }
+    }
+
+    // Helper functions for content extraction
+    function getSelectedText() {
+        return window.getSelection().toString();
+    }
+
+    function extractFallbackThread() {
+        // Common selectors for conversation threads on various platforms
+        let conversationText = '';
+
+        // Try to find common conversation/communication containers
+        const selectors = [
+            '[data-testid*="conversation"]',
+            '[data-testid*="thread"]',
+            '[class*="conversation"]',
+            '[class*="thread"]',
+            '[class*="chat"]',
+            '[class*="message"]',
+            '.communication-container',
+            '.msg-content',
+            '.messagelist',
+            '[role="log"]'
+        ];
+
+        for (const selector of selectors) {
+            const elements = document.querySelectorAll(selector);
+            if (elements.length > 0) {
+                const texts = Array.from(elements).map(el => el.innerText).filter(Boolean);
+                if (texts.length > 0) {
+                    conversationText = texts.join('\n\n');
+                    break;
+                }
+            }
+        }
+
+        if (!conversationText) {
+            // Last resort: try to grab all text content that looks like a conversation
+            const allElements = document.querySelectorAll('div, p, span, li');
+            const potentialConversation = Array.from(allElements)
+                .filter(element => {
+                    const text = element.innerText;
+                    return text.length > 30 && 
+                           (text.includes(':') || text.includes('\n')) &&
+                           text.split('\n').length >= 2;
+                })
+                .slice(0, 10)
+                .map(el => el.innerText)
+                .join('\n\n');
+                
+            if (potentialConversation.length > 50) {
+                conversationText = potentialConversation;
+            }
+        }
+
+        return conversationText.substring(0, 2000); // Limit to prevent huge text
+    }
+
     function handleInputChange() {
         const hasContent = threadInput.value.trim().length > 0;
         generateBtn.disabled = !hasContent || isGenerating;
@@ -380,6 +503,16 @@ Keep it sounding like a real person mid conversation.`;
         toast.textContent = message;
         toast.classList.add('show');
 
+        setTimeout(() => {
+            toast.classList.remove('show');
+        }, 3000);
+    }
+
+    function updateToast(message) {
+        toast.textContent = message;
+        toast.classList.add('show');
+
+        // Auto remove after 3 seconds
         setTimeout(() => {
             toast.classList.remove('show');
         }, 3000);

@@ -8,19 +8,93 @@ console.log('BizCloser content script loaded on:', window.location.href);
 // TODO: Implement DOM selectors and extraction logic for conversation threads
 
 function detectConversationThread() {
-    // Placeholder: Detect if current page contains a conversation thread
-    // This would need specific selectors for each supported platform
+    // Detect if current page contains a conversation thread
+    // Specific selectors for each supported platform
+
+    if (window.location.hostname.includes('aloware.io')) {
+        // Aloware-specific detection and extraction
+        console.log('Detected Aloware page');
+        
+        let conversationText = '';
+        // Look for message containers in Aloware
+        const messageContainers = document.querySelectorAll('.message-body, .chat-message, .message-content, [data-testid="message"]');
+        
+        if (messageContainers.length > 0) {
+            conversationText = Array.from(messageContainers)
+                .map(container => {
+                    const messageDate = container.querySelector('.message-date, .timestamp')?.textContent || '';
+                    const messageAuthor = container.querySelector('.message-author, .sender')?.textContent || 'Participant';
+                    const messageContent = container.innerText.trim();
+                    
+                    if (messageContent) {
+                        return `[${messageDate}] ${messageAuthor}: ${messageContent}`;
+                    }
+                    return messageContent;
+                })
+                .filter(text => text)
+                .join('\n')
+                .substring(0, 2000); // Limit length
+        }
+
+        // Alternative: look for conversation container
+        if (!conversationText) {
+            const conversationContainer = document.querySelector('.conversation-container, .thread-container, .chat-container, .messages');
+            if (conversationContainer) {
+                conversationText = conversationContainer.innerText.trim().substring(0, 2000);
+            }
+        }
+
+        if (conversationText) {
+            console.log('Aloware thread detected');
+            return conversationText;
+        }
+        
+        return null; // No conversation thread found
+    }
 
     if (window.location.hostname.includes('slack.com')) {
         // Slack-specific detection and extraction
-        console.log('Detected Slack page - auto-scrape coming soon');
-        return null; // Return extracted thread or null
+        console.log('Detected Slack page');
+        
+        let conversationText = '';
+        const messageElements = document.querySelectorAll('.c-message__body');
+        
+        if (messageElements.length > 0) {
+            conversationText = Array.from(messageElements)
+                .map(msg => `[${msg.previousElementSibling?.textContent || ''}] ${msg.textContent}`)
+                .join('\n')
+                .substring(0, 2000);
+        }
+
+        if (conversationText) {
+            console.log('Slack thread detected');
+            return conversationText;
+        }
+
+        return null; // No conversation thread found on Slack
     }
 
     if (window.location.hostname.includes('twilio.com')) {
         // Twilio dashboard detection and extraction
-        console.log('Detected Twilio dashboard - auto-scrape coming soon');
-        return null; // Return extracted thread or null
+        console.log('Detected Twilio dashboard');
+        
+        let conversationText = '';
+        // Look for SMS thread in Twilio UI
+        const smsElements = document.querySelectorAll('.sms-message, .message-content, [data-message-id]');
+        
+        if (smsElements.length > 0) {
+            conversationText = Array.from(smsElements)
+                .map(el => el.textContent)
+                .join('\n')
+                .substring(0, 2000);
+        }
+        
+        if (conversationText) {
+            console.log('Twilio thread detected');
+            return conversationText;
+        }
+        
+        return null; // No conversation thread found on Twilio
     }
 
     return null;
@@ -73,7 +147,7 @@ function initialize() {
 
 // Listen for messages from popup or side panel
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === 'getThread') {
+    if (request.action === 'getThread' || request.action === 'getConversationThread') {
         const thread = detectConversationThread();
         sendResponse({ thread: thread });
     }
