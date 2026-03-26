@@ -6,7 +6,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const threadInput = document.getElementById('threadInput');
     const grabConvoBtn = document.getElementById('grabConvoBtn');
     const generateBtn = document.getElementById('generateBtn');
-    const grabConvoBtn = document.getElementById('grabConvoBtn');
     const loading = document.getElementById('loading');
     const errorState = document.getElementById('errorState');
     const errorMessage = document.getElementById('errorMessage');

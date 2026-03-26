@@ -12,10 +12,14 @@ import {
   ExtractConversationResponse,
   ExtensionError,
   GenerateReplyMessage,
-  GenerateReplyResponse
+  GenerateReplyResponse,
+  RefineReplyMessage,
+  RefineReplyResponse,
+  SubmitFeedbackMessage,
+  SubmitFeedbackResponse
 } from '../types/index';
 import { logger } from './logger';
-import { handleAnalyzeConversation, handleGenerateReply } from './api';
+import { handleAnalyzeConversation, handleGenerateReply, handleRefineReply, handleSubmitFeedback } from './api';
 
 // Initialize side panel behavior
 chrome.sidePanel
@@ -182,9 +186,9 @@ async function extractVisibleThreadFromTab(tabId: number): Promise<string | null
 
 // Message listener for communication with side panel
 chrome.runtime.onMessage.addListener((
-  request: GenerateReplyMessage | AnalyzeConversationMessage | ExtractConversationMessage,
+  request: GenerateReplyMessage | AnalyzeConversationMessage | ExtractConversationMessage | RefineReplyMessage | SubmitFeedbackMessage,
   sender: chrome.runtime.MessageSender,
-  sendResponse: (response: GenerateReplyResponse | AnalyzeConversationResponse | ExtractConversationResponse) => void
+  sendResponse: (response: GenerateReplyResponse | AnalyzeConversationResponse | ExtractConversationResponse | RefineReplyResponse | SubmitFeedbackResponse) => void
 ): boolean => {
   logger.debug('Background received message', { action: request.action });
 
@@ -228,6 +232,43 @@ chrome.runtime.onMessage.addListener((
       });
 
     // Return true to indicate asynchronous response
+    return true;
+  }
+
+  if (request.action === 'refineReply') {
+    handleRefineReply(request.thread, request.draftReply, request.analysis, request.editInstruction)
+      .then((data) => {
+        logger.info('Reply refinement successful');
+        sendResponse({ data });
+      })
+      .catch((error: ExtensionError) => {
+        logger.error('Reply refinement failed', { error: error.message });
+        sendResponse({ error: error.message });
+      });
+
+    return true;
+  }
+
+  if (request.action === 'submitFeedback') {
+    handleSubmitFeedback({
+      stage: request.stage,
+      sentiment: request.sentiment,
+      thread: request.thread,
+      analysisSummary: request.analysisSummary,
+      generatedReply: request.generatedReply,
+      refinedReply: request.refinedReply,
+      note: request.note,
+      meta: request.meta
+    })
+      .then((data) => {
+        logger.info('Feedback submission successful');
+        sendResponse({ data });
+      })
+      .catch((error: ExtensionError) => {
+        logger.error('Feedback submission failed', { error: error.message });
+        sendResponse({ error: error.message });
+      });
+
     return true;
   }
 

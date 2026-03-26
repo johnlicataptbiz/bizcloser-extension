@@ -3,183 +3,160 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BizCloser - Reply Composer</title>
+    <title>BizCloser</title>
     <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/icon32.png">
     <link rel="stylesheet" href="sidepanel.css">
 </head>
-<body class="bg-slate-50 min-h-screen">
-    <div class="max-w-sm mx-auto p-4">
-        <header class="mb-6">
-            <div class="mx-auto mb-3 inline-flex items-center rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 shadow-sm">
-                PT Biz Lead Setter
-            </div>
-            <h1 class="text-xl font-semibold text-slate-900 text-center">BizCloser</h1>
-            <p class="text-sm text-slate-600 text-center mt-1">AI-assisted replies from real conversations</p>
+<body>
+    <div class="shell">
+        <header class="app-header">
+            <h1 class="app-header__title">BizCloser</h1>
+            <p class="app-header__subtitle">Simple reply assistant for live lead threads.</p>
         </header>
 
-        <main role="main">
-            <form id="threadForm" class="space-y-4" aria-labelledby="form-title" novalidate>
-                <div>
-                    <label for="threadInput" id="form-title" class="block text-sm font-medium text-slate-700 mb-2">
-                        Conversation Thread
-                    </label>
+        <main class="panel" role="main">
+            <form id="threadForm" class="composer" aria-labelledby="form-title" novalidate>
+                <div class="field">
+                    <div class="field__row">
+                        <label for="threadInput" id="form-title" class="field__label">Conversation</label>
+                        <span class="field__hint">Highlight first on Aloware</span>
+                    </div>
                     <textarea
                         id="threadInput"
-                        class="w-full h-48 p-3 border border-slate-300 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-colors"
-                        placeholder="Paste a thread, or highlight Aloware text and import it..."
+                        class="thread-input"
+                        placeholder="Paste a thread here, or highlight the visible thread in Aloware and import it."
                         aria-describedby="thread-help"
                         aria-required="true"
                         aria-invalid="false"
                         required
                     ></textarea>
-                    <p id="thread-help" class="mt-1 text-xs text-slate-500" role="note">
-                        Best on Aloware: highlight the visible thread, then import
+                    <p id="thread-help" class="field__note" role="note">
+                        Include the full exchange for a better read.
                     </p>
                 </div>
 
-                <button
-                    id="grabConvoBtn"
-                    type="button"
-                    class="w-full bg-cyan-700 hover:bg-cyan-600 text-white font-medium px-4 py-2.5 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 mb-3"
-                    aria-describedby="grab-help"
-                    aria-label="Import conversation from the current tab"
-                >
-                    Import Highlighted / Visible Thread
-                </button>
-                <p id="grab-help" class="sr-only mb-2">
-                    Import highlighted text first, or fall back to the visible conversation on the current tab
-                </p>
-
-                <button
-                    id="analyzeBtn"
-                    type="button"
-                    class="w-full bg-white hover:bg-cyan-50 text-slate-700 font-medium px-4 py-2.5 rounded-md border border-cyan-200 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
-                    aria-describedby="analyze-help"
-                >
-                    Analyze Conversation
-                </button>
-                <p id="analyze-help" class="sr-only">
-                    Extract intent, objections, and the best reply angle before generating a reply
-                </p>
-
-                <button
-                    id="generateBtn"
-                    type="submit"
-                    class="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    aria-describedby="generate-help"
-                    aria-label="Generate a reply from the conversation thread"
-                >
-                    Generate Reply
-                </button>
-                <p id="generate-help" class="sr-only">
-                    Generate a reply based on the conversation thread
-                </p>
+                <div class="action-stack">
+                    <button
+                        id="grabConvoBtn"
+                        type="button"
+                        class="button button--secondary"
+                        aria-describedby="grab-help"
+                        aria-label="Import conversation from the current tab"
+                    >
+                        Import
+                    </button>
+                    <p id="grab-help" class="sr-only">
+                        Import highlighted text first, or fall back to the visible conversation on the current tab
+                    </p>
+                </div>
             </form>
 
-            <div id="loading" class="hidden" role="status" aria-live="polite">
-                <div class="flex flex-col items-center py-8">
-                    <div class="animate-spin rounded-full h-8 w-8 border-2 border-slate-300 border-t-slate-600"></div>
-                    <p class="mt-3 text-sm text-slate-600">Generating reply...</p>
-                </div>
+            <div id="loading" class="hidden status-card" role="status" aria-live="polite">
+                <div class="spinner"></div>
+                <p id="loadingMessage">Generating reply...</p>
             </div>
 
-            <div id="analysisLoading" class="hidden" role="status" aria-live="polite">
-                <div class="analysis-panel analysis-panel--loading">
-                    <div class="analysis-panel__eyebrow">Conversation Analysis</div>
-                    <p class="analysis-panel__copy">Reading the thread and extracting intent, objections, and the best reply angle...</p>
-                </div>
+            <div id="analysisLoading" class="hidden status-card" role="status" aria-live="polite">
+                <div class="card__eyebrow">Analysis</div>
+                <p>Reading the thread and pulling out the most useful signals.</p>
             </div>
 
-            <div id="analysisPanel" class="hidden" role="region" aria-labelledby="analysis-title">
-                <div class="analysis-panel">
-                    <div class="analysis-panel__eyebrow">Conversation Analysis</div>
-                    <h2 id="analysis-title" class="analysis-panel__title">Reply Brief</h2>
+            <section id="analysisPanel" class="hidden card" role="region" aria-labelledby="analysis-title">
+                <div class="card__eyebrow">Analysis</div>
+                <h2 id="analysis-title" class="card__title">Brief</h2>
+
+                <div class="analysis-listing">
                     <div class="analysis-item">
                         <div class="analysis-item__label">Summary</div>
                         <div id="analysisSummary" class="analysis-item__value"></div>
                     </div>
-                    <div class="analysis-grid">
-                        <div class="analysis-item">
-                            <div class="analysis-item__label">Intent</div>
-                            <div id="analysisIntent" class="analysis-item__value"></div>
-                        </div>
-                        <div class="analysis-item">
-                            <div class="analysis-item__label">Recommended Angle</div>
-                            <div id="analysisAngle" class="analysis-item__value"></div>
-                        </div>
+                    <div class="analysis-item">
+                        <div class="analysis-item__label">Intent</div>
+                        <div id="analysisIntent" class="analysis-item__value"></div>
                     </div>
-                    <div class="analysis-item mt-3">
+                    <div class="analysis-item">
+                        <div class="analysis-item__label">Recommended Angle</div>
+                        <div id="analysisAngle" class="analysis-item__value"></div>
+                    </div>
+                    <div class="analysis-item">
                         <div class="analysis-item__label">Objections</div>
-                        <ul id="analysisObjections" class="analysis-list"></ul>
-                    </div>
-                    <div class="analysis-panel__footer">
-                        <span id="analysisConfidence" class="analysis-pill"></span>
+                        <ul id="analysisObjections" class="analysis-bullets"></ul>
                     </div>
                 </div>
-            </div>
 
-            <div id="errorState" class="hidden" role="alert" aria-live="assertive">
-                <div class="bg-red-50 border border-red-200 rounded-md p-4">
-                    <div class="flex">
-                        <div class="flex-shrink-0">
-                            <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                            </svg>
-                        </div>
-                        <div class="ml-3">
-                            <h3 class="text-sm font-medium text-red-800">Generation Failed</h3>
-                            <p id="errorMessage" class="mt-1 text-sm text-red-700">Unable to generate a reply. Please try again.</p>
-                        </div>
-                    </div>
-                    <div class="mt-4">
-                        <button
-                            id="retryBtn"
-                            class="bg-red-100 hover:bg-red-200 text-red-800 px-3 py-1.5 rounded text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-                        >
-                            Try Again
-                        </button>
-                    </div>
+                <div class="analysis-confidence">
+                    <span id="analysisConfidence"></span>
                 </div>
+                <div class="feedback-row">
+                    <button id="analysisUpBtn" type="button" class="feedback-btn" aria-label="Analysis thumbs up">👍</button>
+                    <button id="analysisDownBtn" type="button" class="feedback-btn" aria-label="Analysis thumbs down">👎</button>
+                </div>
+            </section>
+
+            <div id="errorState" class="hidden error-card" role="alert" aria-live="assertive">
+                <div class="error-card__title">Something went wrong</div>
+                <p id="errorMessage" class="error-card__message">Unable to generate a reply. Please try again.</p>
+                <button
+                    id="retryBtn"
+                    class="button button--ghost button--small"
+                >
+                    Try Again
+                </button>
             </div>
 
-            <div id="replyOutput" class="hidden" role="region" aria-labelledby="reply-title">
-                <div class="bg-white border border-cyan-200 rounded-md p-4">
-                    <h2 id="reply-title" class="text-sm font-medium text-slate-900 mb-3">Generated Reply</h2>
-                    <div id="replyContent" class="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed"></div>
+            <section id="replyOutput" class="hidden card" role="region" aria-labelledby="reply-title">
+                <div class="card__eyebrow">Reply</div>
+                <h2 id="reply-title" class="card__title">Suggested</h2>
+                <div id="replyContent" class="reply-copy"></div>
+                <div id="refinementSummary" class="reply-meta hidden"></div>
+                <div id="manualEditPanel" class="manual-edit hidden">
+                    <label for="manualEditInput" class="manual-edit__label">Request a revision</label>
+                    <textarea
+                        id="manualEditInput"
+                        class="manual-edit__input"
+                        placeholder="Example: Make this shorter and ask one direct question."
+                    ></textarea>
+                    <button
+                        id="applyEditBtn"
+                        type="button"
+                        class="button button--ghost"
+                    >
+                        Apply Edit
+                    </button>
+                </div>
+                <div class="feedback-row">
+                    <button id="replyUpBtn" type="button" class="feedback-btn" aria-label="Reply thumbs up">👍</button>
+                    <button id="replyDownBtn" type="button" class="feedback-btn" aria-label="Reply thumbs down">👎</button>
                 </div>
                 <button
                     id="copyBtn"
-                    class="mt-3 w-full bg-cyan-700 hover:bg-cyan-600 text-white font-medium px-4 py-2.5 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+                    class="button button--primary"
                     aria-describedby="copy-help"
                 >
                     Copy Reply
                 </button>
-                    <p id="copy-help" class="sr-only">Copy the generated reply to your clipboard</p>
-                </div>
+                <p id="copy-help" class="sr-only">Copy the generated reply to your clipboard</p>
+            </section>
 
-            <div id="emptyState" class="hidden text-center py-8">
-                <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-cyan-200 bg-slate-900 shadow-lg">
-                    <div class="empty-orb"></div>
-                </div>
-                <h3 class="mt-2 text-sm font-medium text-slate-900">Ready when you are</h3>
-                <p class="mt-1 text-sm text-slate-500">Paste a conversation thread above to generate a reply.</p>
+            <div id="emptyState" class="hidden empty-state">
+                <h3>Ready</h3>
+                <p>Import or paste a thread to begin.</p>
             </div>
         </main>
 
-        <footer class="mt-6 pt-4 border-t border-slate-200">
+        <footer class="panel-footer">
             <button
                 id="clearBtn"
-                class="w-full bg-white hover:bg-cyan-50 text-slate-700 font-medium px-4 py-2.5 rounded-md border border-cyan-200 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+                class="button button--ghost"
                 aria-describedby="clear-help"
             >
-                Clear Thread
+                Clear
             </button>
             <p id="clear-help" class="sr-only">Clear the conversation thread and current reply</p>
         </footer>
     </div>
 
-    <!-- Toast notification -->
-    <div id="toast" class="fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded-md shadow-lg transform translate-y-full transition-transform duration-300" role="status" aria-live="polite">
+    <div id="toast" class="toast" role="status" aria-live="polite">
         Reply copied to clipboard!
     </div>
 

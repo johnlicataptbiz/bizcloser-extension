@@ -14,6 +14,26 @@ export interface AnalyzeConversationMessage extends ChromeMessage {
   thread: string;
 }
 
+export interface RefineReplyMessage extends ChromeMessage {
+  action: 'refineReply';
+  thread: string;
+  draftReply: string;
+  analysis?: ConversationAnalysis;
+  editInstruction?: string;
+}
+
+export interface SubmitFeedbackMessage extends ChromeMessage {
+  action: 'submitFeedback';
+  stage: 'analysis' | 'reply' | 'refine';
+  sentiment: 'up' | 'down';
+  thread: string;
+  analysisSummary?: string;
+  generatedReply?: string;
+  refinedReply?: string;
+  note?: string;
+  meta?: Record<string, unknown>;
+}
+
 export interface ExtractConversationMessage extends ChromeMessage {
   action: 'extractConversation';
 }
@@ -34,6 +54,22 @@ export interface GenerateReplyResponse {
     reply: string;
     [key: string]: any;
   };
+  error?: string;
+}
+
+export interface RefineReplyResult {
+  reply: string;
+  changes: string[];
+  verdict: string;
+}
+
+export interface RefineReplyResponse {
+  data?: RefineReplyResult;
+  error?: string;
+}
+
+export interface SubmitFeedbackResponse {
+  data?: { ok: true };
   error?: string;
 }
 
