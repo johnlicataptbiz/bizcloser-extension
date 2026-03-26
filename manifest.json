@@ -4,6 +4,9 @@
   "version": "1.0",
   "description": "A side panel extension for PT Biz lead setters to generate high-converting SMS replies.",
   "permissions": ["activeTab", "sidePanel", "storage", "scripting"],
+  "background": {
+    "service_worker": "background.js"
+  },
   "side_panel": {
     "default_path": "sidepanel.html"
   },

@@ -228,41 +228,49 @@ Keep it sounding like a real person mid conversation.`;
         hideErrorState();
 
         try {
-            const response = await fetch('http://localhost:3000/api/bizcloser/generate', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    thread: thread,
-                    prompt: bizCloserPrompt
-                })
+            // Send message to background script to handle the API call
+            // This avoids CORS issues and follows Manifest V3 best practices
+            chrome.runtime.sendMessage({
+                action: 'generateReply',
+                thread: thread,
+                prompt: bizCloserPrompt
+            }, async (response) => {
+                if (chrome.runtime.lastError) {
+                    showError('Communication error: ' + chrome.runtime.lastError.message);
+                    updateUIState('error');
+                    isGenerating = false;
+                    return;
+                }
+
+                if (response.error) {
+                    showError(response.error);
+                    updateUIState('error');
+                    isGenerating = false;
+                    return;
+                }
+
+                const data = response.data;
+                if (!data || !data.reply) {
+                    showError('No reply generated');
+                    updateUIState('error');
+                    isGenerating = false;
+                    return;
+                }
+
+                currentReply = data.reply;
+                displayReply(data.reply);
+                updateUIState('success');
+
+                // Save to storage
+                await saveReply(data.reply);
+                isGenerating = false;
             });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.message || `HTTP ${response.status}`);
-            }
-
-            const data = await response.json();
-
-            if (!data.reply) {
-                throw new Error('No reply generated');
-            }
-
-            currentReply = data.reply;
-            displayReply(data.reply);
-            updateUIState('success');
-
-            // Save to storage
-            await saveReply(data.reply);
 
         } catch (error) {
             console.error('Generation error:', error);
             const message = error.message || 'Failed to generate reply. Please try again.';
             showError(message);
             updateUIState('error');
-        } finally {
             isGenerating = false;
         }
     }
