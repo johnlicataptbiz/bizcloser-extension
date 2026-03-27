@@ -46,41 +46,6 @@ export interface SaveHistoryMessage extends ChromeMessage {
   metadata?: Record<string, unknown>;
 }
 
-export interface OpenHubSpotNoteMessage extends ChromeMessage {
-  action: 'openHubSpotNote';
-}
-
-export interface LocalHistorySnapshot {
-  id: string;
-  thread: string;
-  reply: string;
-  analysis?: ConversationAnalysis;
-  timestamp?: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface LocalMeasurementSnapshot {
-  id: string;
-  sessionId: string;
-  createdAt?: string;
-  threadLength: number;
-  hadAnalysis: boolean;
-  firstDraftGenerated: boolean;
-  refineApplied: boolean;
-  alignmentCorrectionUsed: boolean;
-  copied: boolean;
-  manuallyEdited: boolean;
-  latestSignal?: string | null;
-  replyFeedback?: 'up' | 'down' | null;
-  replyFeedbackStage?: 'reply' | 'refine' | 'manual' | null;
-}
-
-export interface SyncLocalDataMessage extends ChromeMessage {
-  action: 'syncLocalData';
-  history: LocalHistorySnapshot[];
-  measurements: LocalMeasurementSnapshot[];
-}
-
 export interface ConversationResponse {
   conversation: string | null;
   success: boolean;
@@ -113,24 +78,6 @@ export interface RefineReplyResponse {
 
 export interface SubmitFeedbackResponse {
   data?: { ok: true };
-  error?: string;
-}
-
-export interface OpenHubSpotNoteResponse {
-  data?: {
-    ok: true;
-    profileUrl: string;
-    noteComposerOpened: boolean;
-  };
-  error?: string;
-}
-
-export interface SyncLocalDataResponse {
-  data?: {
-    ok: true;
-    historySaved: number;
-    measurementsSaved: number;
-  };
   error?: string;
 }
 

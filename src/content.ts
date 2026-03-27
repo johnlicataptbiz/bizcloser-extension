@@ -222,7 +222,7 @@ function extractNodeText(element: HTMLElement, source: 'slack' | 'twilio' | 'alo
         element.querySelector('[data-qa="message-text"]')?.textContent || '',
         element.querySelector('.c-message_kit__text')?.textContent || '',
         element.querySelector('.c-message__content')?.textContent || '',
-        element.textContent || element.innerText || '',
+        element.innerText || '',
       );
       break;
     case 'twilio':
@@ -230,7 +230,7 @@ function extractNodeText(element: HTMLElement, source: 'slack' | 'twilio' | 'alo
         element.querySelector('.message-body')?.textContent || '',
         element.querySelector('.Twilio-Message-Bubble-Body')?.textContent || '',
         element.querySelector('.message-content')?.textContent || '',
-        element.textContent || element.innerText || '',
+        element.innerText || '',
       );
       break;
     case 'aloware':
@@ -238,11 +238,11 @@ function extractNodeText(element: HTMLElement, source: 'slack' | 'twilio' | 'alo
         element.querySelector('[class*="bubble"]')?.textContent || '',
         element.querySelector('[class*="message"]')?.textContent || '',
         element.querySelector('[class*="Message"]')?.textContent || '',
-        element.textContent || element.innerText || '',
+        element.innerText || '',
       );
       break;
     default:
-      candidates.push(element.textContent || element.innerText || '');
+      candidates.push(element.innerText || element.textContent || '');
       break;
   }
 
@@ -261,7 +261,7 @@ function findAlowareConversationRoot(): HTMLElement | null {
 
   let current: HTMLElement | null = composer.parentElement;
   while (current) {
-    const text = normalizeMessageText(current.textContent || current.innerText || '');
+    const text = normalizeMessageText(current.innerText || '');
     if (text.includes('Type your message') && /Sent from|Sequence|Yesterday|Today/.test(text)) {
       return current;
     }
@@ -276,6 +276,8 @@ function cleanAlowareText(text: string): string {
 }
 
 function isAlowareNoise(line: string): boolean {
+  const normalizedLine = line.trim().toLowerCase();
+
   return (
     /^(Text|Fax|Email|Note|Send Text|Conversation|Thread|Messages|Details|Settings|Primary|Wireless|Mobile|Work|Home)$/i.test(line) ||
     /^Type your message$/i.test(line) ||
@@ -291,11 +293,14 @@ function isAlowareNoise(line: string): boolean {
     /^primary$/i.test(line) ||
     /^wireless$/i.test(line) ||
     /^sequence$/i.test(line) ||
+    /^sequence\s*[:\-]?\s*(active|inactive|paused|stopped)$/i.test(line) ||
+    /^(view|edit|add|remove)\s+sequence$/i.test(line) ||
     /^(Yesterday|Today), \d{1,2}:\d{2}\s?(AM|PM)/i.test(line) ||
     /^Today$/i.test(line) ||
     /^Yesterday$/i.test(line) ||
     /^About \d+ (hour|day|minute)s? ago$/i.test(line) ||
-    /\bSequence\b/i.test(line) ||
+    /^(v\d+\.\d+\s+)?sequence(?:\s+(?:status|settings|history|details))?$/i.test(line) ||
+    /\b(?:workshop playbook|cash practice)\b.*\bsequence\b/i.test(normalizedLine) ||
     /\bEDT\b/i.test(line) ||
     /\b(?:am|pm)\b/i.test(line) && /^\d{1,2}:\d{2}\s?(AM|PM)?$/i.test(line) ||
     /^\+?\d{10,}$/.test(line)

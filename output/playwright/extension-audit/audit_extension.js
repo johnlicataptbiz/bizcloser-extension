@@ -5,7 +5,7 @@ const { chromium } = require('playwright');
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
 const extensionPath = repoRoot;
 const artifactDir = __dirname;
-const userDataDir = path.join(__dirname, 'user-data', String(Date.now()));
+const userDataDir = path.join(__dirname, 'user-data');
 
 const sampleThread = [
   'Lead: Hey I have all 4 qualifiers and my practice is already cash based.',
@@ -144,7 +144,6 @@ async function run() {
     });
     await saveSnapshot(page, '02-generated-reply');
 
-    await page.click('#openRevisionBtn');
     await page.fill('#manualEditInput', 'Make this shorter and keep the direct strategy-call ask.');
     await page.click('#applyEditBtn');
     await page.waitForFunction(() => {

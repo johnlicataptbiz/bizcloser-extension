@@ -13,13 +13,9 @@ import {
   ExtensionError,
   GenerateReplyMessage,
   GenerateReplyResponse,
-  SyncLocalDataMessage,
-  SyncLocalDataResponse,
   RefineReplyMessage,
   RefineReplyResponse,
   SaveHistoryMessage,
-  OpenHubSpotNoteMessage,
-  OpenHubSpotNoteResponse,
   SubmitFeedbackMessage,
   SubmitFeedbackResponse
 } from '../types/index';
@@ -29,7 +25,6 @@ import {
   handleGenerateReply,
   handleRefineReply,
   handleSaveHistory,
-  handleSyncLocalData,
   handleSubmitFeedback
 } from './api';
 
@@ -79,10 +74,6 @@ async function extractSelectionFromTab(tabId: number): Promise<string | null> {
   return typeof result === 'string' && result.length > 20 ? result : null;
 }
 
-function readNodeText(node: HTMLElement): string {
-  return (node.textContent || node.innerText || '').trim();
-}
-
 async function tryExtractViaContentScript(tabId: number): Promise<ConversationResponse | null> {
   try {
     return await chrome.tabs.sendMessage(tabId, { action: 'extractConversation' as ExtractConversationMessage['action'] });
@@ -115,6 +106,8 @@ async function extractVisibleThreadFromTab(tabId: number): Promise<string | null
         /^to:/i.test(line) ||
         /^primary$/i.test(line) ||
         /^sequence$/i.test(line) ||
+        /^sequence\s*[:\-]?\s*(active|inactive|paused|stopped)$/i.test(line) ||
+        /^(view|edit|add|remove)\s+sequence$/i.test(line) ||
         /^(Yesterday|Today), \d{1,2}:\d{2}\s?(AM|PM)/i.test(line) ||
         /\bEDT\b/i.test(line) ||
         /^\+?\d{10,}$/.test(line)
@@ -143,7 +136,7 @@ async function extractVisibleThreadFromTab(tabId: number): Promise<string | null
 
         let current: HTMLElement | null = composer.parentElement;
         while (current) {
-          const text = normalize(readNodeText(current));
+          const text = normalize(current.innerText || '');
           if (text.includes('Type your message') && /Sent from|Sequence|Yesterday|Today/.test(text)) {
             return current;
           }
@@ -177,7 +170,7 @@ async function extractVisibleThreadFromTab(tabId: number): Promise<string | null
 
       selectors.forEach((selector) => {
         root.querySelectorAll(selector).forEach((element) => {
-          const raw = element instanceof HTMLElement ? readNodeText(element) : '';
+          const raw = element instanceof HTMLElement ? element.innerText || element.textContent || '' : '';
           const text = isAloware ? cleanAlowareText(raw) : normalize(raw);
 
           if (text.length > 5 && text.length < 3000 && !seen.has(text)) {
@@ -200,145 +193,11 @@ async function extractVisibleThreadFromTab(tabId: number): Promise<string | null
   return typeof result === 'string' && result.length > 20 ? result : null;
 }
 
-async function findHubSpotProfileUrlFromTab(tabId: number): Promise<string | null> {
-  const [{ result }] = await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => {
-      const anchors = Array.from(document.querySelectorAll('a[href]')) as HTMLAnchorElement[];
-      const candidates = anchors
-        .map((a) => a.href)
-        .filter(Boolean)
-        .filter((href) => /hubspot\.com/i.test(href));
-
-      const profileCandidate = candidates.find((href) =>
-        /app\.hubspot\.com\/contacts\/|\/record\/0-1\/|\/contact\//i.test(href)
-      );
-
-      if (profileCandidate) return profileCandidate;
-      return candidates[0] || null;
-    }
-  });
-
-  return typeof result === 'string' && result.length > 0 ? result : null;
-}
-
-async function openHubSpotNoteComposer(tabId: number): Promise<boolean> {
-  const [{ result }] = await chrome.scripting.executeScript({
-    target: { tabId },
-    func: async () => {
-      const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-      const clickFirst = (selectors: string[]): boolean => {
-        for (const selector of selectors) {
-          const node = document.querySelector(selector);
-          if (node instanceof HTMLElement) {
-            node.click();
-            return true;
-          }
-        }
-        return false;
-      };
-
-      const clickByText = (texts: string[]): boolean => {
-        const elements = Array.from(document.querySelectorAll('button, a, [role="button"], [role="menuitem"], [data-testid], [data-test-id]')) as HTMLElement[];
-        for (const element of elements) {
-          const text = (element.textContent || element.innerText || '').trim().toLowerCase();
-          if (!text) continue;
-          if (texts.some((needle) => text === needle || text.startsWith(needle))) {
-            element.click();
-            return true;
-          }
-        }
-        return false;
-      };
-
-      for (let attempt = 0; attempt < 8; attempt++) {
-        const selectorClicked = clickFirst([
-          '[data-selenium-test="activity-compose"]',
-          '[data-test-id="record-activity-tab"]',
-          '[data-test-id="record-tab-activity"]',
-          '[data-test-id="activity-tab"]',
-          '[data-test-id="record-comment-button"]',
-          '[data-test-id="record-note-button"]',
-          '[aria-label*="Note"]',
-          '[aria-label*="Log activity"]'
-        ]);
-
-        const textClicked = clickByText([
-          'activity',
-          'log activity',
-          'note',
-          'create note'
-        ]);
-
-        if (selectorClicked || textClicked) {
-          await sleep(350);
-          const noteClicked = clickByText(['note', 'create note']);
-          if (noteClicked || selectorClicked) {
-            return true;
-          }
-        }
-
-        await sleep(700);
-      }
-
-      return false;
-    }
-  });
-
-  return result === true;
-}
-
-async function handleOpenHubSpotNoteFromActiveTab(): Promise<{ profileUrl: string; noteComposerOpened: boolean }> {
-  const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  if (!activeTab?.id) {
-    throw new ExtensionError('No active tab found.');
-  }
-
-  const profileUrl = await findHubSpotProfileUrlFromTab(activeTab.id);
-  if (!profileUrl) {
-    throw new ExtensionError('No HubSpot profile link found on this page.');
-  }
-
-  const createdTab = await chrome.tabs.create({ url: profileUrl, active: true });
-  if (!createdTab.id) {
-    throw new ExtensionError('Unable to open HubSpot profile tab.');
-  }
-
-  await new Promise<void>((resolve) => {
-    const timeout = setTimeout(() => {
-      chrome.tabs.onUpdated.removeListener(listener);
-      resolve();
-    }, 12000);
-
-    const listener = (updatedTabId: number, changeInfo: chrome.tabs.TabChangeInfo) => {
-      if (updatedTabId === createdTab.id && changeInfo.status === 'complete') {
-        clearTimeout(timeout);
-        chrome.tabs.onUpdated.removeListener(listener);
-        resolve();
-      }
-    };
-
-    chrome.tabs.onUpdated.addListener(listener);
-  });
-
-  let noteComposerOpened = false;
-  try {
-    noteComposerOpened = await openHubSpotNoteComposer(createdTab.id);
-  } catch (error) {
-    logger.warn('Could not auto-open HubSpot note composer', {
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-
-  return { profileUrl, noteComposerOpened };
-}
-
 // Message listener for communication with side panel
 chrome.runtime.onMessage.addListener((
-  request: GenerateReplyMessage | AnalyzeConversationMessage | ExtractConversationMessage | RefineReplyMessage | SubmitFeedbackMessage | SaveHistoryMessage | OpenHubSpotNoteMessage | SyncLocalDataMessage,
+  request: GenerateReplyMessage | AnalyzeConversationMessage | ExtractConversationMessage | RefineReplyMessage | SubmitFeedbackMessage | SaveHistoryMessage,
   sender: chrome.runtime.MessageSender,
-  sendResponse: (response: GenerateReplyResponse | AnalyzeConversationResponse | ExtractConversationResponse | RefineReplyResponse | SubmitFeedbackResponse | OpenHubSpotNoteResponse | SyncLocalDataResponse) => void
+  sendResponse: (response: GenerateReplyResponse | AnalyzeConversationResponse | ExtractConversationResponse | RefineReplyResponse | SubmitFeedbackResponse) => void
 ): boolean => {
   logger.debug('Background received message', { action: request.action });
 
@@ -435,40 +294,6 @@ chrome.runtime.onMessage.addListener((
       })
       .catch((error: ExtensionError) => {
         logger.error('History save failed', { error: error.message });
-        sendResponse({ error: error.message });
-      });
-
-    return true;
-  }
-
-  if (request.action === 'openHubSpotNote') {
-    handleOpenHubSpotNoteFromActiveTab()
-      .then((data) => {
-        logger.info('Opened HubSpot profile tab', { profileUrl: data.profileUrl, noteComposerOpened: data.noteComposerOpened });
-        sendResponse({ data: { ok: true, profileUrl: data.profileUrl, noteComposerOpened: data.noteComposerOpened } });
-      })
-      .catch((error: ExtensionError) => {
-        logger.error('Open HubSpot note flow failed', { error: error.message });
-        sendResponse({ error: error.message });
-      });
-
-    return true;
-  }
-
-  if (request.action === 'syncLocalData') {
-    handleSyncLocalData({
-      history: request.history,
-      measurements: request.measurements
-    })
-      .then((data) => {
-        logger.info('Local data sync successful', {
-          historySaved: data.historySaved,
-          measurementsSaved: data.measurementsSaved
-        });
-        sendResponse({ data });
-      })
-      .catch((error: ExtensionError) => {
-        logger.error('Local data sync failed', { error: error.message });
         sendResponse({ error: error.message });
       });
 
