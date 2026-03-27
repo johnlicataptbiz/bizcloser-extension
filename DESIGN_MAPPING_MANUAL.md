@@ -7,7 +7,7 @@ Figma file:
 - https://www.figma.com/design/gdsKv196l5LT02alRs1Akm/BizCloser-Side-Panel-Color-Refresh?node-id=4-3&t=lljrM8QmN6tcJq8I-1
 
 Machine-readable bridge:
-- [FIGMA_BRIDGE.json](/Users/jl/Desktop/apps/bizcloser-extension/FIGMA_BRIDGE.json)
+- [FIGMA_BRIDGE.json](/Users/jl/Developer/bizcloser/extension/FIGMA_BRIDGE.json)
 
 Use this table for every mapped item:
 
