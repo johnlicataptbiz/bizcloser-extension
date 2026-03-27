@@ -1,0 +1,13 @@
+{
+  "extensionId": "lcihopakpjphdhhjkmmjobigoidkclme",
+  "screenshots": [
+    "01-empty-state.png",
+    "02-generated-reply.png",
+    "03-manual-edit.png",
+    "04-after-save-next.png"
+  ],
+  "localStorageDump": {
+    "history": "[{\"thread\":\"Lead: Hey I have all 4 qualifiers and my practice is already cash based.\\nSetter: Love that. What are you most trying to solve right now?\\nLead: I need help getting more evals consistently and want a real strategy.\\nSetter: Makes sense.\",\"reply\":\"Love that. This is exactly what we map out on a strategy call for cash based practices so you know the clearest path either way. What weekdays are better for you, and do you prefer AM or PM?\",\"analysis\":{\"summary\":\"Lead already has the four qualifiers and is asking for a concrete growth plan.\",\"intent\":\"Warm and qualified. Ready for the next step if the message is decisive.\",\"recommendedAngle\":\"All four qualifiers known with core fit. Pitch strategy call using proven call block and ask weekdays plus AM or PM.\",\"objections\":[\"Needs clarity on the plan before committing time.\"],\"confidence\":\"High\"},\"timestamp\":\"2026-03-27T04:39:56.127Z\"}]",
+    "measurements": "[{\"id\":\"MGZhMmM4NzktMDA0Ny00ZTU2LWFjMzgt\",\"sessionId\":\"0fa2c879-0047-4e56-ac38-0b53275a637d\",\"createdAt\":\"2026-03-27T04:39:56.127Z\",\"threadLength\":233,\"hadAnalysis\":true,\"firstDraftGenerated\":true,\"refineApplied\":true,\"alignmentCorrectionUsed\":false,\"copied\":true,\"manuallyEdited\":true,\"latestSignal\":\"Reply copied\",\"replyFeedback\":\"down\",\"replyFeedbackStage\":\"manual\"}]"
+  }
+}

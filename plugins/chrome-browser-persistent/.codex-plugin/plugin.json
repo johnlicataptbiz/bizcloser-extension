@@ -1,0 +1,40 @@
+{
+  "name": "chrome-browser-persistent",
+  "version": "1.0.0",
+  "description": "Persistent Chrome integration helpers for CDP and Playwright automation.",
+  "author": {
+    "name": "PT Biz Engineering",
+    "email": "support@physicaltherapybiz.com",
+    "url": "https://www.physicaltherapybiz.com"
+  },
+  "homepage": "https://www.physicaltherapybiz.com",
+  "repository": "https://www.physicaltherapybiz.com",
+  "license": "MIT",
+  "keywords": [
+    "chrome",
+    "cdp",
+    "playwright",
+    "persistent-browser"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Chrome Persistent",
+    "shortDescription": "Launch and attach to persistent Chrome sessions.",
+    "longDescription": "Provides standard scripts and guidance for persistent Chrome + Playwright CDP automation in Codex workflows.",
+    "developerName": "PT Biz Engineering",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Automation"
+    ],
+    "websiteURL": "https://www.physicaltherapybiz.com",
+    "privacyPolicyURL": "https://www.physicaltherapybiz.com/privacy-policy",
+    "termsOfServiceURL": "https://www.physicaltherapybiz.com/terms",
+    "defaultPrompt": [
+      "Launch persistent Chrome with remote debugging and connect via CDP.",
+      "Attach Playwright to my existing Chrome browser and run UI checks.",
+      "Verify CDP endpoint is active and list available browser targets."
+    ],
+    "brandColor": "#1D4E89"
+  }
+}

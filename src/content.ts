@@ -30,7 +30,7 @@ function extractConversationFromPage(): string | null {
 
   if (hostname.includes('slack.com')) {
     return extractFromSlack();
-  } else if (hostname.includes('aloware.com')) {
+  } else if (hostname.includes('aloware.com') || hostname.includes('aloware.io')) {
     return extractFromAloware();
   } else if (hostname.includes('twilio.com')) {
     return extractFromTwilio();
@@ -191,6 +191,7 @@ function extractMessages(
         }
 
         text = normalizeMessageText(text);
+        text = cleanConversationText(text, source);
 
         // Filter out very short or very long text
         if (text && text.length > 5 && text.length < 3000) {
@@ -221,7 +222,7 @@ function extractNodeText(element: HTMLElement, source: 'slack' | 'twilio' | 'alo
         element.querySelector('[data-qa="message-text"]')?.textContent || '',
         element.querySelector('.c-message_kit__text')?.textContent || '',
         element.querySelector('.c-message__content')?.textContent || '',
-        element.innerText || '',
+        element.textContent || element.innerText || '',
       );
       break;
     case 'twilio':
@@ -229,7 +230,7 @@ function extractNodeText(element: HTMLElement, source: 'slack' | 'twilio' | 'alo
         element.querySelector('.message-body')?.textContent || '',
         element.querySelector('.Twilio-Message-Bubble-Body')?.textContent || '',
         element.querySelector('.message-content')?.textContent || '',
-        element.innerText || '',
+        element.textContent || element.innerText || '',
       );
       break;
     case 'aloware':
@@ -237,16 +238,16 @@ function extractNodeText(element: HTMLElement, source: 'slack' | 'twilio' | 'alo
         element.querySelector('[class*="bubble"]')?.textContent || '',
         element.querySelector('[class*="message"]')?.textContent || '',
         element.querySelector('[class*="Message"]')?.textContent || '',
-        element.innerText || '',
+        element.textContent || element.innerText || '',
       );
       break;
     default:
-      candidates.push(element.innerText || element.textContent || '');
+      candidates.push(element.textContent || element.innerText || '');
       break;
   }
 
   const text = normalizeMessageText(candidates.find(Boolean) || '');
-  return source === 'aloware' ? cleanAlowareText(text) : text;
+  return cleanConversationText(text, source);
 }
 
 function findAlowareConversationRoot(): HTMLElement | null {
@@ -260,7 +261,7 @@ function findAlowareConversationRoot(): HTMLElement | null {
 
   let current: HTMLElement | null = composer.parentElement;
   while (current) {
-    const text = normalizeMessageText(current.innerText || '');
+    const text = normalizeMessageText(current.textContent || current.innerText || '');
     if (text.includes('Type your message') && /Sent from|Sequence|Yesterday|Today/.test(text)) {
       return current;
     }
@@ -271,31 +272,85 @@ function findAlowareConversationRoot(): HTMLElement | null {
 }
 
 function cleanAlowareText(text: string): string {
-  const lines = text
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((line) => !isAlowareNoise(line));
-
-  return normalizeMessageText(lines.join('\n'));
+  return cleanConversationText(text, 'aloware');
 }
 
 function isAlowareNoise(line: string): boolean {
   return (
-    /^(Text|Fax|Email|Note|Send Text)$/i.test(line) ||
+    /^(Text|Fax|Email|Note|Send Text|Conversation|Thread|Messages|Details|Settings|Primary|Wireless|Mobile|Work|Home)$/i.test(line) ||
     /^Type your message$/i.test(line) ||
+    /^Type a message$/i.test(line) ||
+    /^Message$/i.test(line) ||
     /^Sent from /i.test(line) ||
+    /^Sent to /i.test(line) ||
+    /^Received from /i.test(line) ||
     /^used .* personal line /i.test(line) ||
     /^to \+?\d+/i.test(line) ||
     /^from:/i.test(line) ||
     /^to:/i.test(line) ||
     /^primary$/i.test(line) ||
+    /^wireless$/i.test(line) ||
     /^sequence$/i.test(line) ||
     /^(Yesterday|Today), \d{1,2}:\d{2}\s?(AM|PM)/i.test(line) ||
+    /^Today$/i.test(line) ||
+    /^Yesterday$/i.test(line) ||
+    /^About \d+ (hour|day|minute)s? ago$/i.test(line) ||
     /\bSequence\b/i.test(line) ||
     /\bEDT\b/i.test(line) ||
+    /\b(?:am|pm)\b/i.test(line) && /^\d{1,2}:\d{2}\s?(AM|PM)?$/i.test(line) ||
     /^\+?\d{10,}$/.test(line)
   );
+}
+
+function isGenericNoise(line: string): boolean {
+  return (
+    /^(loading|search|searching|reply|replying|send|send text|send message|copy|copy reply|save|save & next|import|import thread|grab convo|generate|generate reply|conversation|thread|details|notes|activity|history)$/i.test(line) ||
+    /^open chat$/i.test(line) ||
+    /^new message$/i.test(line) ||
+    /^typing/i.test(line) ||
+    /^draft/i.test(line) ||
+    /^timestamp:/i.test(line) ||
+    /^message id:/i.test(line) ||
+    /^\d{1,2}:\d{2}\s?(AM|PM)$/i.test(line) ||
+    /^\d{1,2}:\d{2}\s?(AM|PM)\s?(CDT|CST|EDT|EST|PDT|PST|MST)$/i.test(line)
+  );
+}
+
+function splitConversationLines(text: string): string[] {
+  return text
+    .replace(/\u00a0/g, ' ')
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .flatMap((line) => line.split(/\s{2,}/g))
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function cleanConversationText(text: string, source: 'slack' | 'twilio' | 'aloware' | 'generic'): string {
+  const lines = splitConversationLines(text).filter((line) => {
+    if (source === 'aloware' && isAlowareNoise(line)) return false;
+    if (isGenericNoise(line)) return false;
+
+    return !/^(expand_more|done_all|newest|oldest|mark all as read.*)$/i.test(line);
+  });
+
+  const deduped: string[] = [];
+  const seen = new Set<string>();
+
+  for (const line of lines) {
+    const normalized = line.replace(/[ \t]+/g, ' ').trim();
+    if (!normalized) continue;
+
+    if (seen.has(normalized.toLowerCase())) {
+      continue;
+    }
+
+    seen.add(normalized.toLowerCase());
+    deduped.push(normalized);
+  }
+
+  return normalizeMessageText(deduped.join('\n'));
 }
 
 /**

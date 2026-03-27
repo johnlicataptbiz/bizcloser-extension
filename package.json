@@ -8,13 +8,19 @@
     "type-check": "tsc --noEmit",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "test:extension-audit": "node output/playwright/extension-audit/audit_extension.js",
+    "chrome:start": "./plugins/chrome-browser-persistent/scripts/start_chrome_persistent.sh",
+    "chrome:cdp:check": "node ./plugins/chrome-browser-persistent/scripts/check_cdp_status.mjs",
+    "chrome:attach:raw": "node ./plugins/chrome-browser-persistent/scripts/attach_playwright_cdp.mjs",
+    "chrome:attach": "node ./plugins/chrome-browser-persistent/scripts/attach_flow.mjs"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.268",
     "@vitest/ui": "^1.3.0",
     "copy-webpack-plugin": "^12.0.0",
     "jsdom": "^24.0.0",
+    "playwright": "^1.58.2",
     "ts-loader": "^9.5.4",
     "typescript": "^5.3.0",
     "vitest": "^1.3.0",

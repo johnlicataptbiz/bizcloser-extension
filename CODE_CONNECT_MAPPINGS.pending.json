@@ -1,0 +1,30 @@
+{
+  "fileKey": "gdsKv196l5LT02alRs1Akm",
+  "nodeId": "4:2",
+  "mappings": [
+    {
+      "nodeId": "6:11",
+      "componentName": "State Badge",
+      "source": "sidepanel.html",
+      "label": "Javascript"
+    },
+    {
+      "nodeId": "6:19",
+      "componentName": "Action Button",
+      "source": "sidepanel.html",
+      "label": "Javascript"
+    },
+    {
+      "nodeId": "6:20",
+      "componentName": "Insight Card",
+      "source": "sidepanel.html",
+      "label": "Javascript"
+    },
+    {
+      "nodeId": "6:24",
+      "componentName": "Toast",
+      "source": "sidepanel.html",
+      "label": "Javascript"
+    }
+  ]
+}

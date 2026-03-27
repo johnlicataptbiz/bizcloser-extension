@@ -11,13 +11,7 @@
   },
   "permissions": ["activeTab", "sidePanel", "storage", "tabs", "scripting"],
   "host_permissions": [
-    "http://localhost:3000/*",
-    "https://bizcloser-backend-bdm6kz35v-jack-licatas-projects.vercel.app/*",
-    "https://bizcloser-backend-dmhhunuga-jack-licatas-projects.vercel.app/*",
-    "https://*.aloware.io/*",
-    "https://*.slack.com/*",
-    "https://app.twilio.com/*",
-    "https://dashboard.twilio.com/*"
+    "<all_urls>"
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"
@@ -40,12 +34,7 @@
   "content_scripts": [
     {
       "matches": [
-        "https://*.slack.com/*",
-        "https://app.twilio.com/*",
-        "https://dashboard.twilio.com/*",
-        "https://*.aloware.io/*",
-        "https://talk.aloware.com/*",
-        "https://*.aloware.com/*"
+        "<all_urls>"
       ],
       "js": ["dist/content.js"],
       "run_at": "document_idle"

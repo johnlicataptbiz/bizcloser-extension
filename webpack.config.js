@@ -28,8 +28,17 @@ module.exports = {
     new CopyPlugin({
       patterns: [
         { from: 'manifest.json', to: 'manifest.json' },
-        { from: 'sidepanel.html', to: 'sidepanel.html' },
+        {
+          from: 'sidepanel.html',
+          to: 'sidepanel.html',
+          transform(content) {
+            return content
+              .toString()
+              .replace('src="dist/sidepanel.js"', 'src="sidepanel.js"');
+          }
+        },
         { from: 'sidepanel.css', to: 'sidepanel.css' },
+        { from: 'assets/logo1sms.webp', to: 'assets/logo1sms.webp' },
         { from: 'assets/icons', to: 'assets/icons' }
       ]
     })

@@ -1,0 +1,20 @@
+{
+  "name": "bizcloser-local-plugins",
+  "interface": {
+    "displayName": "BizCloser Local Plugins"
+  },
+  "plugins": [
+    {
+      "name": "chrome-browser-persistent",
+      "source": {
+        "source": "local",
+        "path": "./plugins/chrome-browser-persistent"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
