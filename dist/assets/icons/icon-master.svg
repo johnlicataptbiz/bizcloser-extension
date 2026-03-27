@@ -1,10 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#1D4ED8"/>
-      <stop offset="100%" stop-color="#0F172A"/>
+    <linearGradient id="bg" x1="32" y1="24" x2="224" y2="232" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#153A63"/>
+      <stop offset="100%" stop-color="#0E2E50"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="74" y1="58" x2="190" y2="198" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#E7F1FB" stop-opacity="0.92"/>
+      <stop offset="100%" stop-color="#D3E4F4" stop-opacity="0.78"/>
     </linearGradient>
   </defs>
+
   <rect x="12" y="12" width="232" height="232" rx="56" fill="url(#bg)"/>
-  <path d="M82 70h54c34 0 56 18 56 44 0 17-10 30-25 35 18 5 30 18 30 37 0 30-25 48-63 48H82V70zm48 63c14 0 23-6 23-17 0-11-9-17-23-17h-12v34h12zm5 72c17 0 27-7 27-20 0-13-10-20-27-20h-17v40h17z" fill="#E0F2FE"/>
+  <circle cx="188" cy="64" r="24" fill="#E7F1FB" fill-opacity="0.14"/>
+  <path d="M92 78h88c16 0 28 12 28 28v36c0 16-12 28-28 28h-42l-22 18v-18H92c-16 0-28-12-28-28v-36c0-16 12-28 28-28z" fill="url(#glow)" stroke="#F8FBFF" stroke-opacity="0.9" stroke-width="6" stroke-linejoin="round"/>
+  <rect x="86" y="106" width="62" height="12" rx="6" fill="#153A63" fill-opacity="0.92"/>
+  <rect x="86" y="130" width="80" height="12" rx="6" fill="#153A63" fill-opacity="0.78"/>
+  <rect x="86" y="154" width="50" height="12" rx="6" fill="#153A63" fill-opacity="0.66"/>
+  <path d="M179 84l6 13 13 6-13 6-6 13-6-13-13-6 13-6 6-13z" fill="#FFFFFF"/>
 </svg>
