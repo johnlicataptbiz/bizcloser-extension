@@ -5,7 +5,7 @@ const { chromium } = require('playwright');
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
 const extensionPath = repoRoot;
 const artifactDir = __dirname;
-const userDataDir = path.join(__dirname, 'user-data');
+const userDataDir = path.join(__dirname, `user-data-${Date.now()}-${process.pid}`);
 
 const sampleThread = [
   'Lead: Hey I have all 4 qualifiers and my practice is already cash based.',
