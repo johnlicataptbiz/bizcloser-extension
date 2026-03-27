@@ -23,7 +23,7 @@ A practical side panel extension for PT Biz lead setters. Users can paste a conv
    - Run `npm install` once if needed
    - Run `npm run build`
    - Click "Load unpacked"
-   - Select the `apps/bizcloser-extension/` directory
+   - Select the `/Users/jl/Developer/bizcloser/extension/` directory
    - The extension should now appear in your extensions list
 
 4. **Open Side Panel**:
@@ -60,7 +60,7 @@ The backend:
 
 ### Setting up the Backend
 
-1. Navigate to the backend directory: `cd apps/bizcloser-backend/`
+1. Navigate to the backend directory: `cd /Users/jl/Developer/bizcloser/backend/`
 2. Install dependencies: `npm install`
 3. Set up environment variables (see backend README)
 4. Start the server: `npm start`
@@ -88,7 +88,7 @@ These are currently placeholders for future auto-scraping functionality.
 
 ### File Structure
 ```
-apps/bizcloser-extension/
+/Users/jl/Developer/bizcloser/extension/
 ├── manifest.json          # Extension manifest
 ├── sidepanel.html         # Side panel HTML
 ├── sidepanel.css          # Custom styles
