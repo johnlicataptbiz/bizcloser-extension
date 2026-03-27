@@ -1817,7 +1817,7 @@ class BizCloserSidePanel {
       /\b(?:am|pm)\s*(?:edt|est|cst|pst|mst)\b/i.test(line) ||
       /^\d{1,2}:\d{2}\s?(am|pm)$/i.test(line) ||
       /^\+?\d{10,}$/.test(line) ||
-      /v\d+\.\d+\s+sequence/i.test(line) ||
+      /^(v\d+\.\d+\s+)?sequence(?:\s+(?:status|settings|history|details))?$/i.test(line) ||
       /\bworkshop playbook\b.*\bsequence\b/i.test(normalized) ||
       /\bcash practice\b.*\bsequence\b/i.test(normalized)
     );

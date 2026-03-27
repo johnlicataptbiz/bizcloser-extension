@@ -115,6 +115,8 @@ async function extractVisibleThreadFromTab(tabId: number): Promise<string | null
         /^to:/i.test(line) ||
         /^primary$/i.test(line) ||
         /^sequence$/i.test(line) ||
+        /^sequence\s*[:\-]?\s*(active|inactive|paused|stopped)$/i.test(line) ||
+        /^(view|edit|add|remove)\s+sequence$/i.test(line) ||
         /^(Yesterday|Today), \d{1,2}:\d{2}\s?(AM|PM)/i.test(line) ||
         /\bEDT\b/i.test(line) ||
         /^\+?\d{10,}$/.test(line)
