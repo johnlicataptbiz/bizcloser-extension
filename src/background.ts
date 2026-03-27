@@ -11,11 +11,20 @@ import {
   ExtractConversationMessage,
   ExtractConversationResponse,
   ExtensionError,
+  GetPageContextMessage,
+  GetPageContextResponse,
   GenerateReplyMessage,
   GenerateReplyResponse,
+  InsertReplyMessage,
+  InsertReplyResponse,
+  PageContext,
+  SyncLocalDataMessage,
+  SyncLocalDataResponse,
   RefineReplyMessage,
   RefineReplyResponse,
   SaveHistoryMessage,
+  OpenHubSpotNoteMessage,
+  OpenHubSpotNoteResponse,
   SubmitFeedbackMessage,
   SubmitFeedbackResponse
 } from '../types/index';
@@ -25,8 +34,63 @@ import {
   handleGenerateReply,
   handleRefineReply,
   handleSaveHistory,
+  handleSyncLocalData,
   handleSubmitFeedback
 } from './api';
+
+let lastKnownPageTabId: number | null = null;
+
+function isSupportedPageUrl(url?: string): boolean {
+  if (!url) return false;
+  return /^https?:\/\//i.test(url);
+}
+
+function isPreferredConversationHost(url?: string): boolean {
+  if (!url) return false;
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return (
+      host.includes('aloware.com') ||
+      host.includes('aloware.io') ||
+      host.includes('hubspot.com') ||
+      host.includes('slack.com') ||
+      host.includes('twilio.com') ||
+      host.includes('instagram.com') ||
+      host.includes('facebook.com')
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function getPreferredPageTab(): Promise<chrome.tabs.Tab> {
+  if (lastKnownPageTabId !== null) {
+    try {
+      const rememberedTab = await chrome.tabs.get(lastKnownPageTabId);
+      if (rememberedTab?.id && isSupportedPageUrl(rememberedTab.url)) {
+        return rememberedTab;
+      }
+    } catch {
+      lastKnownPageTabId = null;
+    }
+  }
+
+  const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  if (activeTab?.id && isSupportedPageUrl(activeTab.url)) {
+    lastKnownPageTabId = activeTab.id;
+    return activeTab;
+  }
+
+  const fallbackTabs = await chrome.tabs.query({ lastFocusedWindow: true });
+  const preferredTab = fallbackTabs.find((tab) => tab.id && isSupportedPageUrl(tab.url) && isPreferredConversationHost(tab.url));
+  const fallbackTab = preferredTab || fallbackTabs.find((tab) => tab.id && isSupportedPageUrl(tab.url));
+  if (fallbackTab?.id) {
+    lastKnownPageTabId = fallbackTab.id;
+    return fallbackTab;
+  }
+
+  throw new ExtensionError('Open the CRM conversation tab first, then try again.');
+}
 
 // Initialize side panel behavior
 chrome.sidePanel
@@ -36,11 +100,8 @@ chrome.sidePanel
   });
 
 async function extractConversationFromActiveTab(): Promise<string> {
-  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-
-  if (!tab?.id) {
-    throw new ExtensionError('No active tab found');
-  }
+  const tab = await getPreferredPageTab();
+  if (!tab.id) throw new ExtensionError('No active tab found');
 
   const selectedText = await extractSelectionFromTab(tab.id);
   if (selectedText) {
@@ -74,14 +135,33 @@ async function extractSelectionFromTab(tabId: number): Promise<string | null> {
   return typeof result === 'string' && result.length > 20 ? result : null;
 }
 
+function readNodeText(node: HTMLElement): string {
+  return (node.textContent || node.innerText || '').trim();
+}
+
 async function tryExtractViaContentScript(tabId: number): Promise<ConversationResponse | null> {
   try {
     return await chrome.tabs.sendMessage(tabId, { action: 'extractConversation' as ExtractConversationMessage['action'] });
   } catch (error) {
-    logger.debug('Content script extraction unavailable, using executeScript fallback', {
+    logger.debug('Content script extraction unavailable, attempting reinjection', {
       error: error instanceof Error ? error.message : 'Unknown error'
     });
-    return null;
+
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ['dist/content.js']
+      });
+
+      return await chrome.tabs.sendMessage(tabId, {
+        action: 'extractConversation' as ExtractConversationMessage['action']
+      });
+    } catch (retryError) {
+      logger.debug('Content script reinjection failed, using executeScript fallback', {
+        error: retryError instanceof Error ? retryError.message : 'Unknown error'
+      });
+      return null;
+    }
   }
 }
 
@@ -89,6 +169,7 @@ async function extractVisibleThreadFromTab(tabId: number): Promise<string | null
   const [{ result }] = await chrome.scripting.executeScript({
     target: { tabId },
     func: () => {
+      const readNodeText = (node: HTMLElement): string => (node.textContent || node.innerText || '').trim();
       const normalize = (text: string): string => text
         .replace(/\u00a0/g, ' ')
         .replace(/\r\n/g, '\n')
@@ -136,7 +217,7 @@ async function extractVisibleThreadFromTab(tabId: number): Promise<string | null
 
         let current: HTMLElement | null = composer.parentElement;
         while (current) {
-          const text = normalize(current.innerText || '');
+          const text = normalize(readNodeText(current));
           if (text.includes('Type your message') && /Sent from|Sequence|Yesterday|Today/.test(text)) {
             return current;
           }
@@ -170,7 +251,7 @@ async function extractVisibleThreadFromTab(tabId: number): Promise<string | null
 
       selectors.forEach((selector) => {
         root.querySelectorAll(selector).forEach((element) => {
-          const raw = element instanceof HTMLElement ? element.innerText || element.textContent || '' : '';
+          const raw = element instanceof HTMLElement ? readNodeText(element) : '';
           const text = isAloware ? cleanAlowareText(raw) : normalize(raw);
 
           if (text.length > 5 && text.length < 3000 && !seen.has(text)) {
@@ -193,11 +274,359 @@ async function extractVisibleThreadFromTab(tabId: number): Promise<string | null
   return typeof result === 'string' && result.length > 20 ? result : null;
 }
 
+async function findHubSpotProfileUrlFromTab(tabId: number): Promise<string | null> {
+  const [{ result }] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => {
+      const anchors = Array.from(document.querySelectorAll('a[href]')) as HTMLAnchorElement[];
+      const candidates = anchors
+        .map((a) => a.href)
+        .filter(Boolean)
+        .filter((href) => /hubspot\.com/i.test(href));
+
+      const profileCandidate = candidates.find((href) =>
+        /app\.hubspot\.com\/contacts\/|\/record\/0-1\/|\/contact\//i.test(href)
+      );
+
+      if (profileCandidate) return profileCandidate;
+      return candidates[0] || null;
+    }
+  });
+
+  return typeof result === 'string' && result.length > 0 ? result : null;
+}
+
+async function openHubSpotNoteComposer(tabId: number): Promise<boolean> {
+  const [{ result }] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: async () => {
+      const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+      const clickFirst = (selectors: string[]): boolean => {
+        for (const selector of selectors) {
+          const node = document.querySelector(selector);
+          if (node instanceof HTMLElement) {
+            node.click();
+            return true;
+          }
+        }
+        return false;
+      };
+
+      const clickByText = (texts: string[]): boolean => {
+        const elements = Array.from(document.querySelectorAll('button, a, [role="button"], [role="menuitem"], [data-testid], [data-test-id]')) as HTMLElement[];
+        for (const element of elements) {
+          const text = (element.textContent || element.innerText || '').trim().toLowerCase();
+          if (!text) continue;
+          if (texts.some((needle) => text === needle || text.startsWith(needle))) {
+            element.click();
+            return true;
+          }
+        }
+        return false;
+      };
+
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const selectorClicked = clickFirst([
+          '[data-selenium-test="activity-compose"]',
+          '[data-test-id="record-activity-tab"]',
+          '[data-test-id="record-tab-activity"]',
+          '[data-test-id="activity-tab"]',
+          '[data-test-id="record-comment-button"]',
+          '[data-test-id="record-note-button"]',
+          '[aria-label*="Note"]',
+          '[aria-label*="Log activity"]'
+        ]);
+
+        const textClicked = clickByText([
+          'activity',
+          'log activity',
+          'note',
+          'create note'
+        ]);
+
+        if (selectorClicked || textClicked) {
+          await sleep(350);
+          const noteClicked = clickByText(['note', 'create note']);
+          if (noteClicked || selectorClicked) {
+            return true;
+          }
+        }
+
+        await sleep(700);
+      }
+
+      return false;
+    }
+  });
+
+  return result === true;
+}
+
+async function handleOpenHubSpotNoteFromActiveTab(): Promise<{ profileUrl: string; noteComposerOpened: boolean }> {
+  const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  if (!activeTab?.id) {
+    throw new ExtensionError('No active tab found.');
+  }
+
+  const profileUrl = await findHubSpotProfileUrlFromTab(activeTab.id);
+  if (!profileUrl) {
+    throw new ExtensionError('No HubSpot profile link found on this page.');
+  }
+
+  const createdTab = await chrome.tabs.create({ url: profileUrl, active: true });
+  if (!createdTab.id) {
+    throw new ExtensionError('Unable to open HubSpot profile tab.');
+  }
+
+  await new Promise<void>((resolve) => {
+    const timeout = setTimeout(() => {
+      chrome.tabs.onUpdated.removeListener(listener);
+      resolve();
+    }, 12000);
+
+    const listener = (updatedTabId: number, changeInfo: chrome.tabs.TabChangeInfo) => {
+      if (updatedTabId === createdTab.id && changeInfo.status === 'complete') {
+        clearTimeout(timeout);
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve();
+      }
+    };
+
+    chrome.tabs.onUpdated.addListener(listener);
+  });
+
+  let noteComposerOpened = false;
+  try {
+    noteComposerOpened = await openHubSpotNoteComposer(createdTab.id);
+  } catch (error) {
+    logger.warn('Could not auto-open HubSpot note composer', {
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+
+  return { profileUrl, noteComposerOpened };
+}
+
+function formatDomainLabel(hostname: string): string {
+  const normalized = hostname.replace(/^www\./i, '').toLowerCase();
+  const knownDomains: Array<{ suffix: string; label: string }> = [
+    { suffix: 'aloware.com', label: 'Aloware' },
+    { suffix: 'aloware.io', label: 'Aloware' },
+    { suffix: 'instagram.com', label: 'Instagram' },
+    { suffix: 'facebook.com', label: 'Facebook' },
+    { suffix: 'hubspot.com', label: 'HubSpot' },
+    { suffix: 'slack.com', label: 'Slack' },
+    { suffix: 'twilio.com', label: 'Twilio' }
+  ];
+
+  const knownMatch = knownDomains.find(({ suffix }) => normalized === suffix || normalized.endsWith(`.${suffix}`));
+  if (knownMatch) return knownMatch.label;
+
+  const parts = normalized.split('.').filter(Boolean);
+  const base = parts.length > 0 ? parts[0] : normalized;
+  return base ? `${base.charAt(0).toUpperCase()}${base.slice(1)}` : 'Current Site';
+}
+
+async function getPageContextFromActiveTab(): Promise<PageContext> {
+  const tab = await getPreferredPageTab();
+  if (!tab?.id || !tab.url) {
+    throw new ExtensionError('Open a website tab first, then try again.');
+  }
+  lastKnownPageTabId = tab.id;
+
+  const parsedUrl = new URL(tab.url);
+  const host = parsedUrl.hostname || 'unknown';
+
+  return {
+    host,
+    domainLabel: formatDomainLabel(host),
+    url: tab.url,
+    faviconUrl: tab.favIconUrl || null
+  };
+}
+
+async function insertReplyIntoActiveTab(reply: string): Promise<{ inserted: boolean; reason?: string }> {
+  const tab = await getPreferredPageTab();
+  if (!tab?.id) throw new ExtensionError('No active tab found.');
+
+  const [{ result }] = await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    args: [reply],
+    func: (rawReply: string) => {
+      const text = (rawReply || '').trim();
+      if (!text) {
+        return { inserted: false, reason: 'Reply text is empty.' };
+      }
+
+      const normalizeFieldHint = (value: string | null | undefined): string =>
+        (value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+      const hasMessagingHint = (value: string | null | undefined): boolean => {
+        const hint = normalizeFieldHint(value);
+        if (!hint) return false;
+        return /\b(message|reply|note|comment|sms|chat|compose|inbox|thread|text your message|type your message)\b/i.test(hint);
+      };
+
+      const isLikelyComposerField = (node: HTMLElement): boolean => {
+        if (node instanceof HTMLTextAreaElement) {
+          return true;
+        }
+
+        if (node instanceof HTMLInputElement) {
+          const type = (node.type || 'text').toLowerCase();
+          if (!/^(text|search|email|url|tel)$/i.test(type)) return false;
+          if (type === 'email') return false;
+
+          const hints = [
+            node.placeholder,
+            node.getAttribute('aria-label'),
+            node.getAttribute('title'),
+            node.getAttribute('name'),
+            node.id,
+            node.className
+          ];
+
+          return hints.some((value) => hasMessagingHint(String(value || '')));
+        }
+
+        if (node.isContentEditable) {
+          const hints = [
+            node.getAttribute('aria-label'),
+            node.getAttribute('data-placeholder'),
+            node.getAttribute('title'),
+            node.getAttribute('data-selenium-test'),
+            node.getAttribute('data-test-id'),
+            node.id,
+            node.className
+          ];
+
+          return hints.some((value) => hasMessagingHint(String(value || ''))) ||
+            node.getAttribute('role') === 'textbox';
+        }
+
+        return false;
+      };
+
+      const isVisible = (node: HTMLElement): boolean => {
+        const style = window.getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+      };
+
+      const dispatchInputEvents = (node: HTMLElement): void => {
+        node.dispatchEvent(new Event('input', { bubbles: true }));
+        node.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+
+      const insertIntoTextField = (node: HTMLTextAreaElement | HTMLInputElement): boolean => {
+        if (node.readOnly || node.disabled) return false;
+        node.focus();
+
+        const supportsSelection =
+          typeof node.selectionStart === 'number' &&
+          typeof node.selectionEnd === 'number' &&
+          typeof node.setRangeText === 'function';
+
+        if (supportsSelection) {
+          const start = node.selectionStart ?? node.value.length;
+          const end = node.selectionEnd ?? node.value.length;
+          node.setRangeText(text, start, end, 'end');
+        } else {
+          const prefix = node.value && !node.value.endsWith('\n') ? '\n' : '';
+          node.value = `${node.value || ''}${prefix}${text}`;
+        }
+
+        dispatchInputEvents(node);
+        return true;
+      };
+
+      const insertIntoEditable = (node: HTMLElement): boolean => {
+        if (!node.isContentEditable) return false;
+        node.focus();
+
+        let inserted = false;
+        try {
+          inserted = document.execCommand('insertText', false, text);
+        } catch {
+          inserted = false;
+        }
+
+        if (!inserted) {
+          const prefix = node.textContent && node.textContent.trim().length > 0 ? '\n' : '';
+          node.textContent = `${node.textContent || ''}${prefix}${text}`;
+        }
+
+        dispatchInputEvents(node);
+        return true;
+      };
+
+      const tryInsert = (node: Element | null): boolean => {
+        if (!(node instanceof HTMLElement) || !isVisible(node)) return false;
+        if (!isLikelyComposerField(node)) return false;
+        if (node instanceof HTMLTextAreaElement) return insertIntoTextField(node);
+        if (node instanceof HTMLInputElement && /^(text|search|email|url|tel)$/i.test(node.type || 'text')) {
+          return insertIntoTextField(node);
+        }
+        return insertIntoEditable(node);
+      };
+
+      const activeElement = document.activeElement;
+      if (activeElement && tryInsert(activeElement)) {
+        return { inserted: true };
+      }
+
+      const host = window.location.hostname.toLowerCase();
+      const selectors: string[] = [
+        'textarea[placeholder*="message" i]',
+        'textarea[aria-label*="message" i]',
+        'textarea[placeholder*="reply" i]',
+        'textarea[aria-label*="reply" i]',
+        '[contenteditable="true"][role="textbox"]',
+        '[contenteditable="true"][aria-label*="message" i]',
+        '[contenteditable="true"]',
+        'textarea'
+      ];
+
+      if (host.includes('hubspot.com')) {
+        selectors.unshift(
+          '[data-selenium-test="notetaker-input"]',
+          '[data-test-id*="note"] [contenteditable="true"]',
+          '[data-test-id*="compose"] textarea'
+        );
+      }
+
+      if (host.includes('aloware.com') || host.includes('aloware.io')) {
+        selectors.unshift(
+          'textarea[placeholder*="type your message" i]',
+          '[contenteditable="true"][aria-label*="message" i]'
+        );
+      }
+
+      for (const selector of selectors) {
+        const nodes = Array.from(document.querySelectorAll(selector));
+        for (const node of nodes) {
+          if (tryInsert(node)) {
+            return { inserted: true };
+          }
+        }
+      }
+
+      return {
+        inserted: false,
+        reason: 'No editable message field was found on this page.'
+      };
+    }
+  });
+
+  return result || { inserted: false, reason: 'Unable to insert on this page.' };
+}
+
 // Message listener for communication with side panel
 chrome.runtime.onMessage.addListener((
-  request: GenerateReplyMessage | AnalyzeConversationMessage | ExtractConversationMessage | RefineReplyMessage | SubmitFeedbackMessage | SaveHistoryMessage,
+  request: GenerateReplyMessage | AnalyzeConversationMessage | ExtractConversationMessage | RefineReplyMessage | SubmitFeedbackMessage | SaveHistoryMessage | OpenHubSpotNoteMessage | SyncLocalDataMessage | GetPageContextMessage | InsertReplyMessage,
   sender: chrome.runtime.MessageSender,
-  sendResponse: (response: GenerateReplyResponse | AnalyzeConversationResponse | ExtractConversationResponse | RefineReplyResponse | SubmitFeedbackResponse) => void
+  sendResponse: (response: GenerateReplyResponse | AnalyzeConversationResponse | ExtractConversationResponse | RefineReplyResponse | SubmitFeedbackResponse | OpenHubSpotNoteResponse | SyncLocalDataResponse | GetPageContextResponse | InsertReplyResponse) => void
 ): boolean => {
   logger.debug('Background received message', { action: request.action });
 
@@ -294,6 +723,66 @@ chrome.runtime.onMessage.addListener((
       })
       .catch((error: ExtensionError) => {
         logger.error('History save failed', { error: error.message });
+        sendResponse({ error: error.message });
+      });
+
+    return true;
+  }
+
+  if (request.action === 'openHubSpotNote') {
+    handleOpenHubSpotNoteFromActiveTab()
+      .then((data) => {
+        logger.info('Opened HubSpot profile tab', { profileUrl: data.profileUrl, noteComposerOpened: data.noteComposerOpened });
+        sendResponse({ data: { ok: true, profileUrl: data.profileUrl, noteComposerOpened: data.noteComposerOpened } });
+      })
+      .catch((error: ExtensionError) => {
+        logger.error('Open HubSpot note flow failed', { error: error.message });
+        sendResponse({ error: error.message });
+      });
+
+    return true;
+  }
+
+  if (request.action === 'syncLocalData') {
+    handleSyncLocalData({
+      history: request.history,
+      measurements: request.measurements
+    })
+      .then((data) => {
+        logger.info('Local data sync successful', {
+          historySaved: data.historySaved,
+          measurementsSaved: data.measurementsSaved
+        });
+        sendResponse({ data });
+      })
+      .catch((error: ExtensionError) => {
+        logger.error('Local data sync failed', { error: error.message });
+        sendResponse({ error: error.message });
+      });
+
+    return true;
+  }
+
+  if (request.action === 'getPageContext') {
+    getPageContextFromActiveTab()
+      .then((data) => {
+        sendResponse({ data });
+      })
+      .catch((error: ExtensionError) => {
+        logger.warn('Failed to resolve page context', { error: error.message });
+        sendResponse({ error: error.message });
+      });
+
+    return true;
+  }
+
+  if (request.action === 'insertReply') {
+    insertReplyIntoActiveTab(request.reply)
+      .then((result) => {
+        sendResponse({ data: { ok: true, inserted: result.inserted, reason: result.reason } });
+      })
+      .catch((error: ExtensionError) => {
+        logger.error('Insert reply failed', { error: error.message });
         sendResponse({ error: error.message });
       });
 
