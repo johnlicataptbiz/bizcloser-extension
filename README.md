@@ -65,6 +65,10 @@ The backend:
 3. Set up environment variables (see backend README)
 4. Start the server: `npm start`
 
+### Database validation
+
+For schema, backfill, and monitoring guidance tied to `history_entries`, see [db/README.md](db/README.md), which includes the SQL snippet you mentioned plus Prisma/verification steps.
+
 ## Permissions
 
 The extension requires the following permissions:

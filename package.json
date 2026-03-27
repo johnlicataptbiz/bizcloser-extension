@@ -9,11 +9,7 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
-    "test:extension-audit": "node output/playwright/extension-audit/audit_extension.js",
-    "chrome:start": "./plugins/chrome-browser-persistent/scripts/start_chrome_persistent.sh",
-    "chrome:cdp:check": "node ./plugins/chrome-browser-persistent/scripts/check_cdp_status.mjs",
-    "chrome:attach:raw": "node ./plugins/chrome-browser-persistent/scripts/attach_playwright_cdp.mjs",
-    "chrome:attach": "node ./plugins/chrome-browser-persistent/scripts/attach_flow.mjs"
+    "test:extension-audit": "node output/playwright/extension-audit/audit_extension.js"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.268",

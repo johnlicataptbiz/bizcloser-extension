@@ -2,14 +2,7 @@
  * API client for BizCloser backend communication
  */
 
-import {
-  BackendResponse,
-  ConversationAnalysis,
-  ExtensionError,
-  LocalHistorySnapshot,
-  LocalMeasurementSnapshot,
-  RefineReplyResult
-} from '../types/index';
+import { BackendResponse, ConversationAnalysis, ExtensionError, RefineReplyResult } from '../types/index';
 import { logger } from './logger';
 
 const API_BASE_URLS = [
@@ -18,21 +11,13 @@ const API_BASE_URLS = [
   'http://localhost:3000/api/bizcloser'
 ] as const;
 
-let preferredApiBaseUrl: string | null = null;
-
-type ApiRoute = 'analyze' | 'generate' | 'refine' | 'feedback' | 'history' | 'history-sync';
+type ApiRoute = 'analyze' | 'generate' | 'refine' | 'feedback' | 'history';
 
 async function getConfiguredApiBaseUrls(): Promise<string[]> {
   try {
     const stored = await chrome.storage.local.get(['backendUrl']);
     const configuredUrl = typeof stored.backendUrl === 'string' ? stored.backendUrl.trim() : '';
     const configuredBase = normalizeApiBaseUrl(configuredUrl);
-
-    if (preferredApiBaseUrl) {
-      return [preferredApiBaseUrl, configuredBase, ...API_BASE_URLS]
-        .filter((url): url is string => Boolean(url))
-        .filter((url, index, urls) => urls.indexOf(url) === index);
-    }
 
     return [configuredBase, ...API_BASE_URLS]
       .filter((url): url is string => Boolean(url))
@@ -119,11 +104,6 @@ async function callBackend<T>(route: ApiRoute, payload: unknown, responseValidat
 
       const data = await response.json() as T;
       responseValidator(data);
-
-      if (preferredApiBaseUrl !== baseUrl) {
-        preferredApiBaseUrl = baseUrl;
-      }
-
       return data;
     } catch (error) {
       const extensionError = error instanceof ExtensionError
@@ -299,115 +279,11 @@ export async function handleSaveHistory(payload: {
     return { ok: true };
   } catch (error) {
     if (error instanceof ExtensionError) {
-      logger.warn('History endpoint failed; attempting feedback fallback', {
-        error: error.message,
-        statusCode: error.statusCode
-      });
-
-      await callBackend<{ ok?: boolean }>('feedback', {
-        stage: 'refine',
-        sentiment: 'up',
-        thread: payload.thread,
-        analysisSummary: payload.analysis?.summary,
-        generatedReply: payload.reply,
-        refinedReply: payload.reply,
-        note: 'history-fallback-write',
-        meta: {
-          source: 'history-fallback',
-          ...(payload.metadata || {}),
-          analysis: payload.analysis || null
-        }
-      }, (data) => {
-        if (data.ok !== true) {
-          throw new ExtensionError('Fallback feedback write was not accepted', 'INVALID_RESPONSE');
-        }
-      });
-
-      return { ok: true };
-    }
-
-    const message = error instanceof Error ? error.message : 'Unknown error occurred';
-    logger.error('History save request failed', { error: message });
-    throw new ExtensionError(`Request failed: ${message}`, 'REQUEST_ERROR');
-  }
-}
-
-export async function handleSyncLocalData(payload: {
-  history: LocalHistorySnapshot[];
-  measurements: LocalMeasurementSnapshot[];
-}): Promise<{ ok: true; historySaved: number; measurementsSaved: number }> {
-  const syncViaLegacyHistoryEndpoint = async () => {
-    let historySaved = 0;
-    let measurementsSaved = 0;
-
-    for (const entry of payload.history) {
-      await handleSaveHistory({
-        thread: entry.thread,
-        reply: entry.reply,
-        analysis: entry.analysis,
-        metadata: {
-          source: 'local-history-sync',
-          localSyncId: entry.id,
-          ...(entry.metadata || {})
-        }
-      });
-      historySaved += 1;
-    }
-
-    for (const entry of payload.measurements) {
-      await handleSaveHistory({
-        thread: `[local-measurement:${entry.sessionId}]`,
-        reply: entry.latestSignal || 'Local measurement snapshot',
-        metadata: {
-          source: 'local-measurements-sync',
-          localSyncId: entry.id,
-          sessionId: entry.sessionId,
-          threadLength: entry.threadLength,
-          hadAnalysis: entry.hadAnalysis,
-          firstDraftGenerated: entry.firstDraftGenerated,
-          refineApplied: entry.refineApplied,
-          alignmentCorrectionUsed: entry.alignmentCorrectionUsed,
-          copied: entry.copied,
-          manuallyEdited: entry.manuallyEdited,
-          latestSignal: entry.latestSignal || null,
-          replyFeedback: entry.replyFeedback || null,
-          replyFeedbackStage: entry.replyFeedbackStage || null
-        }
-      });
-      measurementsSaved += 1;
-    }
-
-    return { ok: true as const, historySaved, measurementsSaved };
-  };
-
-  try {
-    const data = await callBackend<{ ok?: boolean; historySaved?: number; measurementsSaved?: number }>(
-      'history-sync',
-      payload,
-      (responseData) => {
-        if (responseData.ok !== true) {
-          throw new ExtensionError('Local data sync was not accepted', 'INVALID_RESPONSE');
-        }
-      }
-    );
-
-    return {
-      ok: true,
-      historySaved: Number(data.historySaved || 0),
-      measurementsSaved: Number(data.measurementsSaved || 0)
-    };
-  } catch (error) {
-    if (error instanceof ExtensionError) {
-      const isMissingRoute = error.statusCode === 404 || /404|not found/i.test(error.message);
-      if (isMissingRoute) {
-        logger.warn('history-sync route unavailable; using legacy /history fallback');
-        return syncViaLegacyHistoryEndpoint();
-      }
       throw error;
     }
 
     const message = error instanceof Error ? error.message : 'Unknown error occurred';
-    logger.error('Local data sync request failed', { error: message });
+    logger.error('History save request failed', { error: message });
     throw new ExtensionError(`Request failed: ${message}`, 'REQUEST_ERROR');
   }
 }

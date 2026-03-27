@@ -1,3 +1,3 @@
-2026/03/27-00:13:29.979 94cf6 Reusing MANIFEST /Users/jl/Desktop/apps/bizcloser-extension/output/playwright/extension-audit/user-data/Default/Sync Data/LevelDB/MANIFEST-000001
-2026/03/27-00:13:29.998 94cf6 Recovering log #3
-2026/03/27-00:13:29.999 94cf6 Reusing old log /Users/jl/Desktop/apps/bizcloser-extension/output/playwright/extension-audit/user-data/Default/Sync Data/LevelDB/000003.log 
+2026/03/26-17:58:30.693 412be Reusing MANIFEST /Users/jl/Desktop/apps/bizcloser-extension/output/playwright/extension-audit/user-data/Default/Sync Data/LevelDB/MANIFEST-000001
+2026/03/26-17:58:30.699 412be Recovering log #3
+2026/03/26-17:58:30.700 412be Reusing old log /Users/jl/Desktop/apps/bizcloser-extension/output/playwright/extension-audit/user-data/Default/Sync Data/LevelDB/000003.log 

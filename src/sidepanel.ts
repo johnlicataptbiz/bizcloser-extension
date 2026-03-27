@@ -10,11 +10,8 @@ import {
   ExtensionError,
   ExtractConversationResponse,
   GenerateReplyResponse,
-  LocalHistorySnapshot,
-  LocalMeasurementSnapshot,
   RefineReplyResponse,
   SubmitFeedbackResponse,
-  SyncLocalDataResponse,
   UIState
 } from '../types/index';
 import { logger } from './logger';
@@ -29,16 +26,11 @@ interface DOMElements {
   analysisSummary: HTMLElement;
   analysisIntent: HTMLElement;
   analysisAngle: HTMLElement;
-  analysisPreview: HTMLElement;
-  analysisToggleBtn: HTMLButtonElement;
-  analysisBody: HTMLElement;
   analysisObjectionGroup: HTMLElement;
   analysisObjections: HTMLElement;
   analysisConfidence: HTMLElement;
   analysisUpBtn: HTMLButtonElement;
   analysisDownBtn: HTMLButtonElement;
-  copyAnalysisBtn: HTMLButtonElement;
-  openHubspotNoteBtn: HTMLButtonElement;
   loading: HTMLElement;
   loadingMessage: HTMLElement;
   loadingSubtext: HTMLElement;
@@ -50,7 +42,6 @@ interface DOMElements {
   replyContent: HTMLElement;
   refinementSummary: HTMLElement;
   metricsPanel: HTMLElement;
-  metricsPanelToggleBtn: HTMLButtonElement;
   qualityBadge: HTMLElement;
   metricSessions: HTMLElement;
   metricCopyRate: HTMLElement;
@@ -61,7 +52,6 @@ interface DOMElements {
   metricsToggleBtn: HTMLButtonElement;
   metricsDetails: HTMLElement;
   manualEditPanel: HTMLElement;
-  openRevisionBtn: HTMLButtonElement;
   manualEditInput: HTMLTextAreaElement;
   quickEditButtons: NodeListOf<HTMLButtonElement>;
   applyEditBtn: HTMLButtonElement;
@@ -92,10 +82,7 @@ interface AppState {
   alignmentCorrectionUsed: boolean;
   latestSignal: string | null;
   replyFeedback: 'up' | 'down' | null;
-  replyFeedbackStage: 'reply' | 'refine' | 'manual' | null;
   metricsExpanded: boolean;
-  analysisExpanded: boolean;
-  metricsPanelVisible: boolean;
 }
 
 interface MeasurementEntry {
@@ -111,13 +98,7 @@ interface MeasurementEntry {
   manuallyEdited: boolean;
   latestSignal: string | null;
   replyFeedback: 'up' | 'down' | null;
-  replyFeedbackStage?: 'reply' | 'refine' | 'manual' | null;
 }
-
-const MAX_EDIT_INSTRUCTION_LENGTH = 700;
-const MIN_MANUAL_EDIT_CHANGE_RATIO = 0.08;
-const HISTORY_SYNC_IDS_KEY = 'bizcloser_sync_history_ids_v1';
-const MEASUREMENT_SYNC_IDS_KEY = 'bizcloser_sync_measurement_ids_v1';
 
 /**
  * Main application class
@@ -127,8 +108,6 @@ class BizCloserSidePanel {
   private state: AppState;
   private autoRunTimer: number | null = null;
   private autoRunId = 0;
-  private localSyncTimer: number | null = null;
-  private syncInFlight = false;
 
   constructor() {
     this.state = {
@@ -143,15 +122,10 @@ class BizCloserSidePanel {
       alignmentCorrectionUsed: false,
       latestSignal: null,
       replyFeedback: null,
-      replyFeedbackStage: null,
-      metricsExpanded: false,
-      analysisExpanded: false,
-      metricsPanelVisible: false
+      metricsExpanded: false
     };
 
     this.elements = this.initializeElements();
-    this.elements.flowCard.setAttribute('data-revision-open', 'false');
-    this.elements.flowCard.setAttribute('data-ml-open', 'false');
     this.setupEventListeners();
     this.setupKeyboardNavigation();
 
@@ -179,16 +153,11 @@ class BizCloserSidePanel {
       analysisSummary: getElement('analysisSummary'),
       analysisIntent: getElement('analysisIntent'),
       analysisAngle: getElement('analysisAngle'),
-      analysisPreview: getElement('analysisPreview'),
-      analysisToggleBtn: getElement<HTMLButtonElement>('analysisToggleBtn'),
-      analysisBody: getElement('analysisBody'),
       analysisObjectionGroup: getElement('analysisObjectionGroup'),
       analysisObjections: getElement('analysisObjections'),
       analysisConfidence: getElement('analysisConfidence'),
       analysisUpBtn: getElement<HTMLButtonElement>('analysisUpBtn'),
       analysisDownBtn: getElement<HTMLButtonElement>('analysisDownBtn'),
-      copyAnalysisBtn: getElement<HTMLButtonElement>('copyAnalysisBtn'),
-      openHubspotNoteBtn: getElement<HTMLButtonElement>('openHubspotNoteBtn'),
       loading: getElement('loading'),
       loadingMessage: getElement('loadingMessage'),
       loadingSubtext: getElement('loadingSubtext'),
@@ -200,7 +169,6 @@ class BizCloserSidePanel {
       replyContent: getElement('replyContent'),
       refinementSummary: getElement('refinementSummary'),
       metricsPanel: getElement('metricsPanel'),
-      metricsPanelToggleBtn: getElement<HTMLButtonElement>('metricsPanelToggleBtn'),
       qualityBadge: getElement('qualityBadge'),
       metricSessions: getElement('metricSessions'),
       metricCopyRate: getElement('metricCopyRate'),
@@ -211,7 +179,6 @@ class BizCloserSidePanel {
       metricsToggleBtn: getElement<HTMLButtonElement>('metricsToggleBtn'),
       metricsDetails: getElement('metricsDetails'),
       manualEditPanel: getElement('manualEditPanel'),
-      openRevisionBtn: getElement<HTMLButtonElement>('openRevisionBtn'),
       manualEditInput: getElement<HTMLTextAreaElement>('manualEditInput'),
       quickEditButtons: document.querySelectorAll<HTMLButtonElement>('[data-quick-edit]'),
       applyEditBtn: getElement<HTMLButtonElement>('applyEditBtn'),
@@ -240,18 +207,13 @@ class BizCloserSidePanel {
     // Button clicks
     this.elements.copyBtn.addEventListener('click', () => this.handleCopyClick());
     this.elements.applyEditBtn.addEventListener('click', () => this.handleManualEditClick());
-    this.elements.analysisToggleBtn.addEventListener('click', () => this.toggleAnalysisDetails());
-    this.elements.metricsPanelToggleBtn.addEventListener('click', () => this.toggleMetricsPanelVisibility());
     this.elements.metricsToggleBtn.addEventListener('click', () => this.toggleMetricsDetails());
     this.elements.analysisUpBtn.addEventListener('click', () => this.handleFeedbackClick('analysis', 'up'));
     this.elements.analysisDownBtn.addEventListener('click', () => this.handleFeedbackClick('analysis', 'down'));
-    this.elements.copyAnalysisBtn.addEventListener('click', () => this.handleCopyAnalysisNotes());
-    this.elements.openHubspotNoteBtn.addEventListener('click', () => this.handleOpenHubSpotNote());
     this.elements.replyUpBtn.addEventListener('click', () => this.handleFeedbackClick('reply', 'up'));
     this.elements.replyDownBtn.addEventListener('click', () => this.handleFeedbackClick('reply', 'down'));
     this.elements.clearBtn.addEventListener('click', () => this.clearAll());
     this.elements.replySaveNextBtn.addEventListener('click', () => this.handleSaveNext());
-    this.elements.openRevisionBtn.addEventListener('click', () => this.handleOpenRevisionClick());
     this.elements.retryBtn.addEventListener('click', () => this.retryGeneration());
     this.elements.quickEditButtons.forEach((button) => {
       button.addEventListener('click', () => this.handleQuickEditSelection(button.dataset.quickEdit || ''));
@@ -260,13 +222,10 @@ class BizCloserSidePanel {
     // Input changes
     this.elements.threadInput.addEventListener('input', () => this.handleInputChange());
     this.setMetricsExpanded(false);
-    this.setAnalysisExpanded(false);
-    this.setMetricsPanelVisible(false);
     this.updateThreadStatus();
     this.updateSaveNextAvailability();
     this.updateUIState('empty');
     this.renderMeasurementStats();
-    void this.syncLocalStorageDataToBackend();
   }
 
   private cancelAutoRun(): void {
@@ -296,7 +255,6 @@ class BizCloserSidePanel {
     const history = JSON.parse(localStorage.getItem('bizcloser_history_v1') || '[]') as any[];
     history.unshift(payload);
     localStorage.setItem('bizcloser_history_v1', JSON.stringify(history.slice(0, 50)));
-    this.scheduleLocalSync();
 
     try {
       await new Promise<void>((resolve, reject) => {
@@ -333,51 +291,9 @@ class BizCloserSidePanel {
   private handleQuickEditSelection(instruction: string): void {
     if (!instruction) return;
 
-    this.revealRevisionEditor();
     this.elements.manualEditInput.value = instruction;
     this.elements.manualEditInput.focus();
     this.showToast('Quick edit loaded. Apply it when ready.');
-  }
-
-  private handleOpenRevisionClick(): void {
-    this.revealRevisionEditor();
-    this.elements.manualEditInput.focus();
-  }
-
-  private revealRevisionEditor(): void {
-    this.elements.openRevisionBtn.classList.add('hidden');
-    this.elements.manualEditPanel.classList.remove('hidden');
-    this.elements.flowCard.setAttribute('data-revision-open', 'true');
-  }
-
-  private resetRevisionEditor(): void {
-    this.elements.manualEditPanel.classList.add('hidden');
-    this.elements.openRevisionBtn.classList.remove('hidden');
-    this.elements.manualEditInput.value = '';
-    this.elements.flowCard.setAttribute('data-revision-open', 'false');
-  }
-
-  private setAnalysisExpanded(expanded: boolean): void {
-    this.state.analysisExpanded = expanded;
-    this.elements.analysisBody.classList.toggle('hidden', !expanded);
-    this.elements.analysisToggleBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-    this.elements.analysisToggleBtn.textContent = expanded ? 'Hide details' : 'Show details';
-  }
-
-  private toggleAnalysisDetails(): void {
-    this.setAnalysisExpanded(!this.state.analysisExpanded);
-  }
-
-  private setMetricsPanelVisible(visible: boolean): void {
-    this.state.metricsPanelVisible = visible;
-    this.elements.metricsPanel.classList.toggle('hidden', !visible);
-    this.elements.metricsPanelToggleBtn.setAttribute('aria-expanded', visible ? 'true' : 'false');
-    this.elements.metricsPanelToggleBtn.textContent = visible ? 'Hide ML Impact' : 'Show ML Impact';
-    this.elements.flowCard.setAttribute('data-ml-open', visible ? 'true' : 'false');
-  }
-
-  private toggleMetricsPanelVisibility(): void {
-    this.setMetricsPanelVisible(!this.state.metricsPanelVisible);
   }
 
   /**
@@ -414,11 +330,6 @@ class BizCloserSidePanel {
    * Analyze -> Generate -> Evaluate -> Refine in one visible pipeline
    */
   private async runAutoPipeline(thread: string): Promise<void> {
-    if (this.state.isRunningPipeline) {
-      logger.debug('Ignoring pipeline start request while another run is active');
-      return;
-    }
-
     const runId = ++this.autoRunId;
     this.state.isRunningPipeline = true;
     this.state.firstDraft = '';
@@ -428,7 +339,6 @@ class BizCloserSidePanel {
     this.state.alignmentCorrectionUsed = false;
     this.state.latestSignal = null;
     this.state.replyFeedback = null;
-    this.state.replyFeedbackStage = null;
     this.state.sessionId = this.buildSessionId();
     this.updateUIState('loading');
     this.hideErrorState();
@@ -447,8 +357,8 @@ class BizCloserSidePanel {
       if (!firstDraft) return;
 
       this.state.firstDraft = firstDraft.reply;
-      this.elements.replyOutput.classList.add('hidden');
-      this.elements.refinementSummary.classList.add('hidden');
+      this.displayReply(firstDraft.reply);
+      this.showRefinementSummary('Draft generated. Evaluating quality and improving...');
 
       this.setPipelineStage('refine');
       this.setLoadingMessage('Evaluating and refining draft...');
@@ -466,7 +376,7 @@ class BizCloserSidePanel {
       let refinementChanges = refined?.changes || [];
       let refinementVerdict = refined?.verdict || 'Auto-edit pass skipped. Using first draft.';
 
-      if (this.requiresReplyRealignment(analysis, thread, finalReply)) {
+      if (this.requiresReplyRealignment(analysis, finalReply)) {
         this.setLoadingMessage('Tightening final reply to match the recommended angle...');
 
         const alignmentPass = await this.requestRefineReply(
@@ -488,25 +398,16 @@ class BizCloserSidePanel {
         }
       }
 
-      if (this.requiresReplyRealignment(analysis, thread, finalReply)) {
-        finalReply = this.buildGuaranteedStrategyCallReply(analysis, thread);
-        this.state.alignmentCorrectionUsed = true;
-        this.state.latestSignal = 'Fallback strategy-call rewrite applied';
-        refinementChanges = [...refinementChanges, 'Applied guaranteed strategy-call fallback'];
-        refinementVerdict = 'Fallback rewrite applied to enforce strategy-call invitation structure.';
-      }
-
       this.setPipelineStage('done');
       this.state.currentReply = finalReply;
       if (!this.state.latestSignal) {
         this.state.latestSignal = this.state.firstDraft !== finalReply ? 'Refine changed the reply' : 'First draft held';
       }
-      this.renderAnalysis(analysis);
       this.displayReply(finalReply);
       this.persistMeasurementSnapshot();
       this.renderMeasurementStats();
 
-      if (this.requiresReplyRealignment(analysis, thread, finalReply)) {
+      if (this.requiresReplyRealignment(analysis, finalReply)) {
         logger.warn('Final reply still appears misaligned with analysis', {
           recommendedAngle: analysis.recommendedAngle,
           replyPreview: finalReply.slice(0, 160)
@@ -521,7 +422,7 @@ class BizCloserSidePanel {
       } else {
         this.showRefinementSummary(refinementVerdict);
       }
-      this.resetRevisionEditor();
+      this.elements.manualEditPanel.classList.remove('hidden');
       this.updateUIState('success');
       logger.info('Auto pipeline completed successfully');
 
@@ -540,8 +441,7 @@ class BizCloserSidePanel {
   }
 
   private async analyzeConversation(thread: string, runId?: number): Promise<ConversationAnalysis | null> {
-    // Keep a single visible loading state (pipeline card) to avoid duplicate-spinner UX.
-    this.elements.analysisLoading.classList.add('hidden');
+    this.elements.analysisLoading.classList.remove('hidden');
     this.elements.analysisPanel.classList.add('hidden');
 
     try {
@@ -573,6 +473,7 @@ class BizCloserSidePanel {
       }
 
       this.state.analysis = response.data;
+      this.renderAnalysis(response.data);
       logger.info('Conversation analysis displayed successfully');
       return response.data;
     } catch (error) {
@@ -607,7 +508,6 @@ class BizCloserSidePanel {
 
         this.elements.threadInput.value = parsedConversation;
         this.elements.threadInput.dispatchEvent(new Event('input'));
-        this.cancelAutoRun();
         this.showToast('Thread imported successfully!');
         await this.runAutoPipeline(parsedConversation);
         logger.info('Conversation extracted and analyzed');
@@ -646,54 +546,6 @@ class BizCloserSidePanel {
     }
   }
 
-  private async handleCopyAnalysisNotes(): Promise<void> {
-    if (!this.state.analysis) {
-      this.showToast('Run analysis first.');
-      return;
-    }
-
-    const notes = this.buildAnalysisNotes(this.state.analysis);
-    try {
-      await navigator.clipboard.writeText(notes);
-      this.showToast('Analysis notes copied.');
-    } catch (error) {
-      logger.error('Failed to copy analysis notes', {
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      this.fallbackCopyToClipboard(notes);
-    }
-  }
-
-  private async handleOpenHubSpotNote(): Promise<void> {
-    this.elements.openHubspotNoteBtn.disabled = true;
-    try {
-      const response = await chrome.runtime.sendMessage({
-        action: 'openHubSpotNote'
-      }) as { data?: { noteComposerOpened: boolean }; error?: string };
-
-      if (response?.error) {
-        throw new ExtensionError(response.error);
-      }
-
-      if (!response?.data) {
-        throw new ExtensionError('No HubSpot result returned.');
-      }
-
-      this.showToast(
-        response.data.noteComposerOpened
-          ? 'Opened HubSpot profile and launched note composer.'
-          : 'Opened HubSpot profile. If needed, click Note manually.'
-      );
-    } catch (error) {
-      logger.error('Failed to open HubSpot note', {
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      this.showToast('Could not find/open HubSpot profile from this tab.');
-    } finally {
-      this.elements.openHubspotNoteBtn.disabled = false;
-    }
-  }
-
   private async handleFeedbackClick(
     stage: 'analysis' | 'reply',
     sentiment: 'up' | 'down'
@@ -729,11 +581,7 @@ class BizCloserSidePanel {
       }
 
       if (stage === 'reply') {
-        const feedbackStage: 'reply' | 'refine' | 'manual' = this.state.wasManuallyEdited
-          ? 'manual'
-          : (replyStage === 'refine' ? 'refine' : 'reply');
         this.state.replyFeedback = sentiment;
-        this.state.replyFeedbackStage = feedbackStage;
         this.state.latestSignal = sentiment === 'up' ? 'Reply marked helpful' : 'Reply marked needs work';
         this.persistMeasurementSnapshot();
         this.renderMeasurementStats();
@@ -764,7 +612,6 @@ class BizCloserSidePanel {
       return;
     }
 
-    const sanitizedInstruction = this.sanitizeEditInstruction(editInstruction);
     this.elements.applyEditBtn.disabled = true;
     this.setPipelineStage('refine');
     this.setLoadingMessage('Applying your edit request...');
@@ -777,55 +624,21 @@ class BizCloserSidePanel {
         draftReply,
         this.state.analysis || undefined,
         undefined,
-        sanitizedInstruction
+        editInstruction
       );
 
       if (!refined?.reply) {
         throw new ExtensionError('No refined reply returned.');
       }
 
-      let finalReply = refined.reply;
-      let finalChanges = refined.changes;
-      let finalVerdict = refined.verdict;
-
-      if (!this.isMeaningfullyDifferentReply(draftReply, finalReply)) {
-        const forcedInstruction = this.buildForcedManualEditInstruction(sanitizedInstruction);
-        const forcedRefine = await this.requestRefineReply(
-          thread,
-          draftReply,
-          this.state.analysis || undefined,
-          undefined,
-          forcedInstruction
-        );
-
-        if (forcedRefine?.reply && this.isMeaningfullyDifferentReply(draftReply, forcedRefine.reply)) {
-          finalReply = forcedRefine.reply;
-          finalChanges = forcedRefine.changes.length
-            ? [...finalChanges, ...forcedRefine.changes]
-            : [...finalChanges, 'Applied stronger rewrite pass'];
-          finalVerdict = forcedRefine.verdict || 'Applied stronger rewrite pass.';
-          this.showToast('Applied stronger rewrite pass.');
-        } else {
-          const localFallback = this.applyLocalManualEditFallback(draftReply, sanitizedInstruction);
-          if (localFallback && this.isMeaningfullyDifferentReply(draftReply, localFallback)) {
-            finalReply = localFallback;
-            finalChanges = [...finalChanges, 'Applied local fallback edit'];
-            finalVerdict = 'Applied local edit fallback.';
-            this.showToast('Applied local fallback edit.');
-          } else {
-            throw new ExtensionError('Edit did not produce a visible change. Try a more specific request.');
-          }
-        }
-      }
-
-      this.state.currentReply = finalReply;
+      this.state.currentReply = refined.reply;
       this.state.wasManuallyEdited = true;
       this.state.latestSignal = 'Manual edit applied';
-      this.displayReply(finalReply);
-      const changesText = finalChanges.length
-        ? `Manual edit: ${finalChanges.join(' | ')}`
+      this.displayReply(refined.reply);
+      const changesText = refined.changes.length
+        ? `Manual edit: ${refined.changes.join(' | ')}`
         : 'Manual edit applied.';
-      this.showRefinementSummary(`${changesText} ${finalVerdict}`.trim());
+      this.showRefinementSummary(`${changesText} ${refined.verdict}`.trim());
       this.elements.manualEditInput.value = '';
       this.persistMeasurementSnapshot();
       this.renderMeasurementStats();
@@ -883,16 +696,13 @@ class BizCloserSidePanel {
       this.state.alignmentCorrectionUsed = false;
       this.state.latestSignal = null;
       this.state.replyFeedback = null;
-      this.state.replyFeedbackStage = null;
       this.state.metricsExpanded = false;
-      this.state.analysisExpanded = false;
-      this.state.metricsPanelVisible = false;
       this.elements.replyOutput.classList.add('hidden');
       this.elements.analysisPanel.classList.add('hidden');
       this.elements.refinementSummary.classList.add('hidden');
-      this.resetRevisionEditor();
+      this.elements.manualEditPanel.classList.add('hidden');
+      this.elements.manualEditInput.value = '';
       this.setMetricsExpanded(false);
-      this.setMetricsPanelVisible(false);
       this.renderMeasurementStats();
       this.scheduleAutoRun(this.elements.threadInput.value.trim());
     }
@@ -934,18 +744,15 @@ class BizCloserSidePanel {
     this.state.alignmentCorrectionUsed = false;
     this.state.latestSignal = null;
     this.state.replyFeedback = null;
-    this.state.replyFeedbackStage = null;
     this.state.metricsExpanded = false;
-    this.state.analysisExpanded = false;
-    this.state.metricsPanelVisible = false;
     this.state.sessionId = '';
     this.updateUIState('empty');
     this.elements.analysisPanel.classList.add('hidden');
     this.elements.analysisLoading.classList.add('hidden');
     this.elements.refinementSummary.classList.add('hidden');
-    this.resetRevisionEditor();
+    this.elements.manualEditPanel.classList.add('hidden');
+    this.elements.manualEditInput.value = '';
     this.setMetricsExpanded(false);
-    this.setMetricsPanelVisible(false);
     this.updateThreadStatus();
     this.updateSaveNextAvailability();
     this.renderMeasurementStats();
@@ -977,15 +784,8 @@ class BizCloserSidePanel {
     this.elements.errorState.classList.add('hidden');
     this.elements.replyOutput.classList.add('hidden');
     this.elements.emptyState.classList.add('hidden');
-    this.elements.openRevisionBtn.classList.add('hidden');
-    this.elements.analysisPanel.classList.add('hidden');
-    this.elements.metricsPanelToggleBtn.classList.add('hidden');
     this.elements.replySaveNextBtn.disabled = state === 'loading' || !this.state.currentReply;
     this.elements.primaryActionBtn.disabled = state === 'loading';
-    if (state !== 'success') {
-      this.setAnalysisExpanded(false);
-      this.setMetricsPanelVisible(false);
-    }
 
     // Show relevant state
     switch (state) {
@@ -998,10 +798,7 @@ class BizCloserSidePanel {
         this.setFlowCardMeta('Action needed', 'Could not finish run', 'Try again after checking thread content.');
         break;
       case 'success':
-        this.elements.analysisPanel.classList.remove('hidden');
         this.elements.replyOutput.classList.remove('hidden');
-        this.elements.openRevisionBtn.classList.remove('hidden');
-        this.elements.metricsPanelToggleBtn.classList.remove('hidden');
         this.setFlowCardMeta('Ready', 'Reply generated', 'Review, optionally edit, then copy or save for the next lead.');
         break;
       case 'empty':
@@ -1021,7 +818,7 @@ class BizCloserSidePanel {
   private displayReply(reply: string): void {
     this.elements.replyContent.textContent = reply;
     this.elements.replyOutput.classList.remove('hidden');
-    this.setMetricsPanelVisible(false);
+    this.elements.metricsPanel.classList.remove('hidden');
     this.updateThreadStatus();
     this.updateSaveNextAvailability();
     this.elements.copyBtn.focus();
@@ -1151,16 +948,12 @@ class BizCloserSidePanel {
     runId?: number,
     editInstruction?: string
   ): Promise<{ reply: string; changes: string[]; verdict: string } | null> {
-    const safeInstruction = typeof editInstruction === 'string'
-      ? this.sanitizeEditInstruction(editInstruction)
-      : undefined;
-
     const response: RefineReplyResponse = await chrome.runtime.sendMessage({
       action: 'refineReply',
       thread,
       draftReply,
       analysis,
-      editInstruction: safeInstruction
+      editInstruction
     });
 
     if (typeof runId === 'number' && runId !== this.autoRunId) {
@@ -1184,26 +977,22 @@ class BizCloserSidePanel {
   }
 
   private buildAutoRefineInstruction(analysis: ConversationAnalysis, draftReply: string): string | undefined {
-    if (this.shouldPitchStrategyCall(analysis, this.elements.threadInput.value) && !this.replyContainsCallInvite(draftReply)) {
+    if (this.shouldPitchStrategyCall(analysis) && !this.replyContainsCallInvite(draftReply)) {
       return this.buildAlignmentCorrectionInstruction(analysis);
     }
 
     return undefined;
   }
 
-  private requiresReplyRealignment(analysis: ConversationAnalysis, thread: string, reply: string): boolean {
-    if (this.shouldPitchStrategyCall(analysis, thread)) {
+  private requiresReplyRealignment(analysis: ConversationAnalysis, reply: string): boolean {
+    if (this.shouldPitchStrategyCall(analysis)) {
       return !this.replyContainsCallInvite(reply);
     }
 
     return false;
   }
 
-  private shouldPitchStrategyCall(analysis: ConversationAnalysis, thread: string): boolean {
-    if (this.shouldAvoidHardPitch(analysis, thread)) {
-      return false;
-    }
-
+  private shouldPitchStrategyCall(analysis: ConversationAnalysis): boolean {
     const combinedAnalysis = [
       analysis.intent,
       analysis.summary,
@@ -1218,45 +1007,6 @@ class BizCloserSidePanel {
       combinedAnalysis.includes('scheduling preference') ||
       combinedAnalysis.includes('weekdays and am or pm')
     );
-  }
-
-  private shouldAvoidHardPitch(analysis: ConversationAnalysis, thread: string): boolean {
-    const combined = [
-      analysis.summary,
-      analysis.intent,
-      analysis.recommendedAngle,
-      analysis.objections.join(' '),
-      thread
-    ].join(' ').toLowerCase();
-
-    const softGatingSignals = [
-      'if ownership intent aligns',
-      'else qualify',
-      'qualify ownership preference first',
-      'not fully core fit',
-      'briefly explain',
-      'what do you do'
-    ];
-
-    const lowReadinessSignals = [
-      "can't legally work",
-      'cannot legally work',
-      'student',
-      'school',
-      'low availability',
-      'not sure',
-      "don't know yet",
-      'dont know yet',
-      'no idea where to start',
-      'low responsibility',
-      "don't want too much responsibility",
-      'work in someone else',
-      'may or may not'
-    ];
-
-    const hasSoftGatingSignal = softGatingSignals.some((signal) => combined.includes(signal));
-    const lowReadinessHits = lowReadinessSignals.filter((signal) => combined.includes(signal)).length;
-    return hasSoftGatingSignal || lowReadinessHits >= 2;
   }
 
   private replyContainsCallInvite(reply: string): boolean {
@@ -1279,158 +1029,12 @@ class BizCloserSidePanel {
       'The current draft does not match the recommended angle.',
       `Recommended angle: ${analysis.recommendedAngle}`,
       'Rewrite it so the message clearly pitches the strategy call instead of asking more qualifying questions.',
-      'Use a rigid PT Biz booking structure in this exact order:',
-      '1) energetic acknowledgment tied to their exact setup,',
-      '2) validation + this is exactly what we map out on a strategy call,',
-      '3) 3 concrete areas we would map on the call customized to this lead,',
-      '4) positioned fit statement (not for everyone / niched and specialized),',
-      '5) value frame (even if they do not move forward, this clarity helps),',
-      '6) exact CTA asking weekdays and AM or PM.',
-      'Do not abbreviate. Do not collapse this into 1-2 short lines. Keep it conversational Jack voice with full structure.'
+      'Mirror the proven PT Biz call invite structure: enthusiastic acknowledgment, brief validation, explain this is exactly what gets mapped out on a strategy call, mention it is specialized for cash based practices, reassure clarity helps either way, then ask for weekdays and AM or PM.',
+      'Keep Jack voice casual and direct. Do not stay in generic nurture mode.'
     ].join(' ');
-  }
-
-  private sanitizeEditInstruction(editInstruction: string): string {
-    const normalized = editInstruction.replace(/\s+/g, ' ').trim();
-    if (normalized.length <= MAX_EDIT_INSTRUCTION_LENGTH) {
-      return normalized;
-    }
-
-    this.showToast('Long edit shortened for reliability. Keep key intent up front.');
-    return `${normalized.slice(0, MAX_EDIT_INSTRUCTION_LENGTH)}...`;
-  }
-
-  private buildForcedManualEditInstruction(userInstruction: string): string {
-    return [
-      `User request: ${userInstruction}`,
-      'Rewrite the reply so it is meaningfully different from the original.',
-      'Do not keep the same sentence structure.',
-      'Change wording and cadence while preserving intent.',
-      'Return only the final rewritten reply.'
-    ].join(' ');
-  }
-
-  private isMeaningfullyDifferentReply(original: string, revised: string): boolean {
-    const normalize = (value: string) => value
-      .toLowerCase()
-      .replace(/[^\w\s]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    const a = normalize(original);
-    const b = normalize(revised);
-    if (!a || !b) return false;
-    if (a === b) return false;
-
-    const tokenSet = (value: string): Set<string> => new Set(value.split(' ').filter(Boolean));
-    const aTokens = tokenSet(a);
-    const bTokens = tokenSet(b);
-    const intersection = [...aTokens].filter((token) => bTokens.has(token)).length;
-    const union = new Set([...aTokens, ...bTokens]).size || 1;
-    const jaccard = intersection / union;
-    const relativeLengthDelta = Math.abs(a.length - b.length) / Math.max(a.length, 1);
-
-    return jaccard < 0.92 || relativeLengthDelta >= MIN_MANUAL_EDIT_CHANGE_RATIO;
-  }
-
-  private applyLocalManualEditFallback(draftReply: string, instruction: string): string | null {
-    const normalizedInstruction = instruction.toLowerCase();
-    let result = draftReply.trim();
-    let changed = false;
-
-    if (/\bshort|shorter|condense|concise\b/.test(normalizedInstruction)) {
-      const sentences = result.split(/(?<=[.!?])\s+/).filter(Boolean);
-      if (sentences.length > 2) {
-        const first = sentences[0];
-        const lastQuestion = [...sentences].reverse().find((sentence) => sentence.includes('?')) || sentences[1];
-        result = `${first} ${lastQuestion}`.trim();
-        changed = true;
-      }
-    }
-
-    if (/\bdirect|confident|stronger\b/.test(normalizedInstruction)) {
-      const before = result;
-      result = result
-        .replace(/\b(maybe|kind of|sort of|probably|i think|might)\b/gi, '')
-        .replace(/\s{2,}/g, ' ')
-        .trim();
-      changed = changed || before !== result;
-    }
-
-    if (/\bwarm|warmer|friendly\b/.test(normalizedInstruction)) {
-      const warmPrefix = 'Appreciate you sharing this.';
-      if (!result.toLowerCase().startsWith('appreciate you sharing this')) {
-        result = `${warmPrefix} ${result}`;
-        changed = true;
-      }
-    }
-
-    if (/\bnatural|human|less robotic\b/.test(normalizedInstruction)) {
-      const before = result;
-      result = result
-        .replace(/This is exactly what we map out on a strategy call/gi, "This is exactly what we'd map out on a quick strategy call")
-        .replace(/so you know what to do next either way/gi, 'so you leave with a clear next step either way');
-      changed = changed || before !== result;
-    }
-
-    return changed ? result : null;
-  }
-
-  private buildGuaranteedStrategyCallReply(analysis: ConversationAnalysis, thread: string): string {
-    const normalizedThread = thread.toLowerCase();
-    const mentionCashBased = /cash|cash pay|cash-based/.test(normalizedThread)
-      || /cash|cash pay|cash-based/.test(analysis.intent.toLowerCase())
-      || /cash|cash pay|cash-based/.test(analysis.recommendedAngle.toLowerCase());
-    const mentionsHybrid = /hybrid/.test(normalizedThread) || /hybrid/.test(analysis.recommendedAngle.toLowerCase());
-    const mentionsNeuro = /neuro/.test(normalizedThread);
-    const mentionsOrtho = /ortho|sports/.test(normalizedThread);
-
-    const setupLine = mentionsHybrid
-      ? 'Love this, and your hybrid-now with cash-transition thinking is exactly the kind of setup we help with all the time.'
-      : 'Love this, and your setup is exactly the kind of fit we help with all the time.';
-    const validation = mentionCashBased
-      ? 'Everything you shared is exactly what we map out on a strategy call for cash based and hybrid practices.'
-      : 'Everything you shared is exactly what we map out on a strategy call.';
-
-    const areaOne = mentionsHybrid
-      ? 'how to structure the hybrid model now so it supports a clean cash transition later'
-      : 'how to structure your offer and model for your stage right now';
-    const areaTwo = mentionsNeuro || mentionsOrtho
-      ? `how to position your ${(mentionsNeuro ? 'neuro ' : '')}${(mentionsNeuro && mentionsOrtho) ? 'and ' : ''}${(mentionsOrtho ? 'ortho/sports ' : '')}focus so the right patients clearly see the value`
-      : 'how to position your niche so the right patients clearly see the value';
-    const areaThree = 'what your launch sequence should look like so you are not stuck in trial and error';
-
-    const fitLine = 'This is not something we offer to everyone off the bat since our work is pretty niched and specialized, but based on what you shared you seem like a strong fit for this conversation.';
-    const valueLine = 'And even if you decided not to move forward with anything, getting this clarity would likely save you a lot of time and mistakes early on.';
-    const close = 'If you are open to it, what weekdays tend to work best for you, and do you prefer AM or PM?';
-
-    return [
-      setupLine,
-      validation,
-      `On that call, we would map 3 things: ${areaOne}, ${areaTwo}, and ${areaThree}.`,
-      fitLine,
-      valueLine,
-      close
-    ].join(' ');
-  }
-
-  private buildAnalysisNotes(analysis: ConversationAnalysis): string {
-    const objections = analysis.objections.length ? analysis.objections.join('; ') : 'None';
-    return [
-      `Summary: ${analysis.summary}`,
-      `Intent: ${analysis.intent}`,
-      `Recommended Angle: ${analysis.recommendedAngle}`,
-      `Main Friction: ${objections}`,
-      `Confidence: ${analysis.confidence}`
-    ].join('\n');
   }
 
   private renderAnalysis(analysis: ConversationAnalysis): void {
-    const previewParts = [analysis.intent, analysis.recommendedAngle]
-      .map((part) => part.trim())
-      .filter(Boolean);
-
-    this.elements.analysisPreview.textContent = previewParts.join(' ');
     this.elements.analysisSummary.textContent = analysis.summary;
     this.elements.analysisIntent.textContent = analysis.intent;
     this.elements.analysisAngle.textContent = analysis.recommendedAngle;
@@ -1447,7 +1051,6 @@ class BizCloserSidePanel {
       this.elements.analysisObjections.appendChild(item);
     });
 
-    this.setAnalysisExpanded(false);
     this.elements.analysisPanel.classList.remove('hidden');
   }
 
@@ -1510,8 +1113,7 @@ class BizCloserSidePanel {
       copied: this.state.wasCopied,
       manuallyEdited: this.state.wasManuallyEdited,
       latestSignal: this.state.latestSignal,
-      replyFeedback: this.state.replyFeedback,
-      replyFeedbackStage: this.state.replyFeedbackStage
+      replyFeedback: this.state.replyFeedback
     };
 
     const existingIndex = entries.findIndex((entry) => entry.id === id);
@@ -1522,7 +1124,6 @@ class BizCloserSidePanel {
     }
 
     localStorage.setItem('bizcloser_measurements_v1', JSON.stringify(entries.slice(0, 200)));
-    this.scheduleLocalSync();
   }
 
   private buildMeasurementId(thread: string): string {
@@ -1541,41 +1142,17 @@ class BizCloserSidePanel {
   private renderMeasurementStats(): void {
     const entries = this.getMeasurementEntries();
     const total = entries.length;
-    const feedbackEntries = entries.filter((entry) => entry.replyFeedback === 'up' || entry.replyFeedback === 'down');
-
-    const initialDraftFeedback = feedbackEntries.filter(
-      (entry) => (entry.replyFeedbackStage || 'reply') === 'reply'
-    );
-    const initialDraftAccepted = initialDraftFeedback.filter((entry) => entry.replyFeedback === 'up').length;
-
-    const postRefineFeedback = feedbackEntries.filter(
-      (entry) => (entry.replyFeedbackStage || 'reply') === 'refine'
-    );
-    const postRefineAccepted = postRefineFeedback.filter((entry) => entry.replyFeedback === 'up').length;
-
-    const manualEditFeedback = feedbackEntries.filter(
-      (entry) => (entry.replyFeedbackStage || null) === 'manual'
-    );
-    const manualEditAccepted = manualEditFeedback.filter((entry) => entry.replyFeedback === 'up').length;
-
-    const replySessions = entries.filter((entry) => entry.firstDraftGenerated).length;
-    const copiedReplies = entries.filter((entry) => entry.copied).length;
-
+    const firstDraftKept = entries.filter((entry) => entry.firstDraftGenerated && !entry.refineApplied && !entry.manuallyEdited).length;
+    const refined = entries.filter((entry) => entry.refineApplied).length;
+    const alignmentRescues = entries.filter((entry) => entry.alignmentCorrectionUsed).length;
+    const badSuggestions = entries.filter((entry) => entry.replyFeedback === 'down').length;
     const latestSignal = entries.find((entry) => entry.latestSignal)?.latestSignal || this.state.latestSignal;
 
     this.elements.metricSessions.textContent = total ? `${total} tracked replies` : 'No replies tracked yet';
-    this.elements.metricCopyRate.textContent = initialDraftFeedback.length
-      ? `${Math.round((initialDraftAccepted / initialDraftFeedback.length) * 100)}% (${initialDraftAccepted}/${initialDraftFeedback.length})`
-      : 'No explicit draft feedback yet';
-    this.elements.metricEditRate.textContent = postRefineFeedback.length
-      ? `${Math.round((postRefineAccepted / postRefineFeedback.length) * 100)}% (${postRefineAccepted}/${postRefineFeedback.length})`
-      : 'No explicit refine feedback yet';
-    this.elements.metricBookedRate.textContent = manualEditFeedback.length
-      ? `${Math.round((manualEditAccepted / manualEditFeedback.length) * 100)}% (${manualEditAccepted}/${manualEditFeedback.length})`
-      : 'No explicit manual-edit feedback yet';
-    this.elements.metricRefineLift.textContent = replySessions
-      ? `${Math.round((copiedReplies / replySessions) * 100)}% (${copiedReplies}/${replySessions})`
-      : 'No reply sessions yet';
+    this.elements.metricCopyRate.textContent = total ? `${Math.round((firstDraftKept / total) * 100)}% (${firstDraftKept}/${total})` : 'No data yet';
+    this.elements.metricEditRate.textContent = total ? `${Math.round((refined / total) * 100)}% (${refined}/${total})` : 'No data yet';
+    this.elements.metricBookedRate.textContent = total ? `${Math.round((alignmentRescues / total) * 100)}% (${alignmentRescues}/${total})` : 'No data yet';
+    this.elements.metricRefineLift.textContent = total ? `${Math.round((badSuggestions / total) * 100)}% (${badSuggestions}/${total})` : 'No data yet';
     this.elements.metricLatestOutcome.textContent = latestSignal || 'No signal logged yet';
 
     const qualityLabel = this.state.currentReply
@@ -1589,131 +1166,11 @@ class BizCloserSidePanel {
       : 'Tracking live';
 
     this.elements.qualityBadge.textContent = qualityLabel;
-    this.elements.metricsPanelToggleBtn.classList.toggle('hidden', !this.state.currentReply && total === 0);
+    if (this.state.currentReply || total > 0) {
+      this.elements.metricsPanel.classList.remove('hidden');
+    }
 
     this.updateSaveNextAvailability();
-  }
-
-  private scheduleLocalSync(): void {
-    if (this.localSyncTimer !== null) {
-      window.clearTimeout(this.localSyncTimer);
-    }
-
-    this.localSyncTimer = window.setTimeout(() => {
-      this.localSyncTimer = null;
-      void this.syncLocalStorageDataToBackend();
-    }, 1200);
-  }
-
-  private getSyncedIds(storageKey: string): Set<string> {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      const parsed = raw ? JSON.parse(raw) : [];
-      return new Set(Array.isArray(parsed) ? parsed.filter((value) => typeof value === 'string') : []);
-    } catch {
-      return new Set();
-    }
-  }
-
-  private setSyncedIds(storageKey: string, ids: Set<string>): void {
-    localStorage.setItem(storageKey, JSON.stringify([...ids].slice(-1000)));
-  }
-
-  private getLocalHistoryEntriesForSync(): LocalHistorySnapshot[] {
-    try {
-      const raw = localStorage.getItem('bizcloser_history_v1');
-      const parsed = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(parsed)) return [];
-
-      return parsed
-        .filter((entry) => entry && typeof entry.thread === 'string' && typeof entry.reply === 'string')
-        .map((entry) => {
-          const id = this.buildLocalHistorySyncId(entry);
-          return {
-            id,
-            thread: entry.thread,
-            reply: entry.reply,
-            analysis: entry.analysis,
-            timestamp: typeof entry.timestamp === 'string' ? entry.timestamp : new Date().toISOString(),
-            metadata: entry.metadata && typeof entry.metadata === 'object' ? entry.metadata : undefined
-          } as LocalHistorySnapshot;
-        });
-    } catch {
-      return [];
-    }
-  }
-
-  private buildLocalHistorySyncId(entry: Record<string, unknown>): string {
-    const thread = typeof entry.thread === 'string' ? entry.thread : '';
-    const reply = typeof entry.reply === 'string' ? entry.reply : '';
-    const timestamp = typeof entry.timestamp === 'string' ? entry.timestamp : '';
-    const basis = `history|${timestamp}|${thread.slice(0, 180)}|${reply.slice(0, 180)}`;
-    return btoa(unescape(encodeURIComponent(basis))).replace(/=+$/g, '').slice(0, 48);
-  }
-
-  private getLocalMeasurementEntriesForSync(): LocalMeasurementSnapshot[] {
-    return this.getMeasurementEntries().map((entry) => ({
-      id: entry.id,
-      sessionId: entry.sessionId,
-      createdAt: entry.createdAt,
-      threadLength: entry.threadLength,
-      hadAnalysis: entry.hadAnalysis,
-      firstDraftGenerated: entry.firstDraftGenerated,
-      refineApplied: entry.refineApplied,
-      alignmentCorrectionUsed: entry.alignmentCorrectionUsed,
-      copied: entry.copied,
-      manuallyEdited: entry.manuallyEdited,
-      latestSignal: entry.latestSignal,
-      replyFeedback: entry.replyFeedback,
-      replyFeedbackStage: entry.replyFeedbackStage || null
-    }));
-  }
-
-  private async syncLocalStorageDataToBackend(): Promise<void> {
-    if (this.syncInFlight) return;
-
-    const historyEntries = this.getLocalHistoryEntriesForSync();
-    const measurementEntries = this.getLocalMeasurementEntriesForSync();
-    if (!historyEntries.length && !measurementEntries.length) return;
-
-    const syncedHistoryIds = this.getSyncedIds(HISTORY_SYNC_IDS_KEY);
-    const syncedMeasurementIds = this.getSyncedIds(MEASUREMENT_SYNC_IDS_KEY);
-
-    const unsyncedHistory = historyEntries.filter((entry) => !syncedHistoryIds.has(entry.id));
-    const unsyncedMeasurements = measurementEntries.filter((entry) => !syncedMeasurementIds.has(entry.id));
-    if (!unsyncedHistory.length && !unsyncedMeasurements.length) return;
-
-    this.syncInFlight = true;
-
-    try {
-      const response = await chrome.runtime.sendMessage({
-        action: 'syncLocalData',
-        history: unsyncedHistory,
-        measurements: unsyncedMeasurements
-      }) as SyncLocalDataResponse;
-
-      if (response.error) {
-        throw new ExtensionError(response.error);
-      }
-
-      unsyncedHistory.forEach((entry) => syncedHistoryIds.add(entry.id));
-      unsyncedMeasurements.forEach((entry) => syncedMeasurementIds.add(entry.id));
-      this.setSyncedIds(HISTORY_SYNC_IDS_KEY, syncedHistoryIds);
-      this.setSyncedIds(MEASUREMENT_SYNC_IDS_KEY, syncedMeasurementIds);
-
-      logger.info('Local storage synced to backend', {
-        historySubmitted: unsyncedHistory.length,
-        measurementsSubmitted: unsyncedMeasurements.length,
-        historySaved: response.data?.historySaved ?? 0,
-        measurementsSaved: response.data?.measurementsSaved ?? 0
-      });
-    } catch (error) {
-      logger.warn('Local sync failed', {
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-    } finally {
-      this.syncInFlight = false;
-    }
   }
 
   /**

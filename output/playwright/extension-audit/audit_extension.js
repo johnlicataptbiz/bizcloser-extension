@@ -5,7 +5,7 @@ const { chromium } = require('playwright');
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
 const extensionPath = repoRoot;
 const artifactDir = __dirname;
-const userDataDir = path.join(__dirname, 'user-data', String(Date.now()));
+const userDataDir = path.join(__dirname, `user-data-${Date.now()}-${process.pid}`);
 
 const sampleThread = [
   'Lead: Hey I have all 4 qualifiers and my practice is already cash based.',
@@ -144,7 +144,10 @@ async function run() {
     });
     await saveSnapshot(page, '02-generated-reply');
 
+    // Open the manual revision UI and wait for controls to be ready
     await page.click('#openRevisionBtn');
+    await page.waitForSelector('#manualEditInput', { state: 'visible' });
+    await page.waitForSelector('#applyEditBtn', { state: 'visible' });
     await page.fill('#manualEditInput', 'Make this shorter and keep the direct strategy-call ask.');
     await page.click('#applyEditBtn');
     await page.waitForFunction(() => {

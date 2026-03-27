@@ -222,7 +222,7 @@ function extractNodeText(element: HTMLElement, source: 'slack' | 'twilio' | 'alo
         element.querySelector('[data-qa="message-text"]')?.textContent || '',
         element.querySelector('.c-message_kit__text')?.textContent || '',
         element.querySelector('.c-message__content')?.textContent || '',
-        element.textContent || element.innerText || '',
+        element.innerText || '',
       );
       break;
     case 'twilio':
@@ -230,7 +230,7 @@ function extractNodeText(element: HTMLElement, source: 'slack' | 'twilio' | 'alo
         element.querySelector('.message-body')?.textContent || '',
         element.querySelector('.Twilio-Message-Bubble-Body')?.textContent || '',
         element.querySelector('.message-content')?.textContent || '',
-        element.textContent || element.innerText || '',
+        element.innerText || '',
       );
       break;
     case 'aloware':
@@ -238,11 +238,11 @@ function extractNodeText(element: HTMLElement, source: 'slack' | 'twilio' | 'alo
         element.querySelector('[class*="bubble"]')?.textContent || '',
         element.querySelector('[class*="message"]')?.textContent || '',
         element.querySelector('[class*="Message"]')?.textContent || '',
-        element.textContent || element.innerText || '',
+        element.innerText || '',
       );
       break;
     default:
-      candidates.push(element.textContent || element.innerText || '');
+      candidates.push(element.innerText || element.textContent || '');
       break;
   }
 
@@ -261,7 +261,7 @@ function findAlowareConversationRoot(): HTMLElement | null {
 
   let current: HTMLElement | null = composer.parentElement;
   while (current) {
-    const text = normalizeMessageText(current.textContent || current.innerText || '');
+    const text = normalizeMessageText(current.innerText || '');
     if (text.includes('Type your message') && /Sent from|Sequence|Yesterday|Today/.test(text)) {
       return current;
     }

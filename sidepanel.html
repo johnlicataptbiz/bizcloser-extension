@@ -59,21 +59,8 @@
                     <p id="generate-help" class="sr-only">Draft a reply from the pasted thread or import the visible conversation from the current tab.</p>
                     <p class="action-stack__hint">One click runs with pasted text or imports from the current tab.</p>
                 </div>
-                <button
-                    id="generateBtn"
-                    type="submit"
-                    class="button button--primary"
-                    aria-describedby="generate-help"
-                    aria-label="Generate a reply from the conversation thread"
-                >
-                    Generate Reply
-                </button>
-                <p id="generate-help" class="sr-only">
-                    Generate a reply based on the conversation thread
-                </p>
             </form>
 
-            <!-- Figma bridge: state gallery source node 7:2 -->
             <section id="flowCard" class="flow-card" role="region" aria-label="BizCloser workflow">
                 <div class="flow-card__meta">
                     <span id="flowStateBadge" class="flow-card__badge">Ready</span>
@@ -85,7 +72,15 @@
 
                 <div id="loading" class="hidden status-card flow-section" role="status" aria-live="polite" aria-busy="true">
                     <div class="status-card__topline">
-                        <div class="spinner"></div>
+                        <div class="loading-visual" aria-hidden="true">
+                            <div class="loading-orb"></div>
+                            <div class="loading-rings"></div>
+                            <div class="loading-dots">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                        </div>
                         <div>
                             <div class="card__eyebrow">Pipeline</div>
                             <p id="loadingMessage" class="status-card__message">Analyzing conversation...</p>
@@ -101,7 +96,10 @@
 
                 <div id="analysisLoading" class="hidden status-card flow-section" role="status" aria-live="polite" aria-busy="true">
                     <div class="status-card__topline">
-                        <div class="spinner"></div>
+                        <div class="loading-visual loading-visual--compact" aria-hidden="true">
+                            <div class="loading-orb"></div>
+                            <div class="loading-rings"></div>
+                        </div>
                         <div>
                             <div class="card__eyebrow">Analysis</div>
                             <p class="status-card__message">Reading the thread and pulling out the most useful signals.</p>
@@ -110,70 +108,36 @@
                     <p class="status-card__subtext">We’re extracting intent, objections, and the strongest reply angle before drafting.</p>
                 </div>
 
-                <!-- Figma bridge: insight card component node 6:20 -->
-                <section id="analysisPanel" class="hidden flow-section analysis-shell" role="region" aria-labelledby="analysis-title">
-                    <div class="analysis-shell__header">
-                        <div>
-                            <div class="card__eyebrow">Insight</div>
-                            <h2 id="analysis-title" class="card__title">Why this reply</h2>
+                <section id="analysisPanel" class="hidden flow-section analysis-panel" role="region" aria-labelledby="analysis-title">
+                    <div class="card__eyebrow">Analysis</div>
+                    <h2 id="analysis-title" class="card__title">Brief</h2>
+
+                    <div class="analysis-listing">
+                        <div class="analysis-item">
+                            <div class="analysis-item__label">Summary</div>
+                            <div id="analysisSummary" class="analysis-item__value"></div>
                         </div>
-                        <button
-                            id="analysisToggleBtn"
-                            type="button"
-                            class="button button--ghost button--chip"
-                            aria-expanded="false"
-                            aria-controls="analysisBody"
-                        >
-                            Show details
-                        </button>
+                        <div class="analysis-item">
+                            <div class="analysis-item__label">What They Want</div>
+                            <div id="analysisIntent" class="analysis-item__value"></div>
+                        </div>
+                        <div class="analysis-item analysis-item--featured">
+                            <div class="analysis-item__label">Recommended Angle</div>
+                            <div id="analysisAngle" class="analysis-item__value"></div>
+                        </div>
+                        <div id="analysisObjectionGroup" class="analysis-item hidden">
+                            <div class="analysis-item__label">Main Friction</div>
+                            <ul id="analysisObjections" class="analysis-bullets"></ul>
+                        </div>
                     </div>
-                    <p id="analysisPreview" class="analysis-preview"></p>
 
                     <div class="analysis-confidence">
                         <span class="analysis-confidence__label">Confidence</span>
                         <span id="analysisConfidence" class="analysis-confidence__value"></span>
                     </div>
-
-                    <div id="analysisBody" class="hidden">
-                        <div class="analysis-listing">
-                            <div class="analysis-item">
-                                <div class="analysis-item__label">Summary</div>
-                                <div id="analysisSummary" class="analysis-item__value"></div>
-                            </div>
-                            <div class="analysis-item">
-                                <div class="analysis-item__label">What They Want</div>
-                                <div id="analysisIntent" class="analysis-item__value"></div>
-                            </div>
-                            <div class="analysis-item analysis-item--featured">
-                                <div class="analysis-item__label">Recommended Angle</div>
-                                <div id="analysisAngle" class="analysis-item__value"></div>
-                            </div>
-                            <div id="analysisObjectionGroup" class="analysis-item hidden">
-                                <div class="analysis-item__label">Main Friction</div>
-                                <ul id="analysisObjections" class="analysis-bullets"></ul>
-                            </div>
-                        </div>
-
-                        <div class="analysis-actions">
-                            <button
-                                id="copyAnalysisBtn"
-                                type="button"
-                                class="button button--ghost button--small"
-                            >
-                                Copy Analysis Notes
-                            </button>
-                            <button
-                                id="openHubspotNoteBtn"
-                                type="button"
-                                class="button button--secondary button--small"
-                            >
-                                Open HubSpot Note
-                            </button>
-                        </div>
-                        <div class="feedback-row">
-                            <button id="analysisUpBtn" type="button" class="feedback-btn" aria-label="Analysis thumbs up">Helpful</button>
-                            <button id="analysisDownBtn" type="button" class="feedback-btn" aria-label="Analysis thumbs down">Off</button>
-                        </div>
+                    <div class="feedback-row">
+                        <button id="analysisUpBtn" type="button" class="feedback-btn" aria-label="Analysis thumbs up">Helpful</button>
+                        <button id="analysisDownBtn" type="button" class="feedback-btn" aria-label="Analysis thumbs down">Off</button>
                     </div>
                 </section>
 
@@ -193,15 +157,6 @@
                     <h2 id="reply-title" class="card__title">Suggested</h2>
                     <div id="replyContent" class="reply-copy"></div>
                     <div id="refinementSummary" class="reply-meta hidden"></div>
-                    <button
-                        id="metricsPanelToggleBtn"
-                        type="button"
-                        class="button button--ghost button--small hidden"
-                        aria-expanded="false"
-                        aria-controls="metricsPanel"
-                    >
-                        Show ML Impact
-                    </button>
                     <section id="metricsPanel" class="ml-panel hidden" aria-labelledby="ml-panel-title">
                         <div class="ml-panel__header">
                             <div>
@@ -233,30 +188,23 @@
                         </div>
                         <div id="metricsDetails" class="ml-grid hidden">
                             <div class="ml-item">
-                                <div class="ml-item__label">Initial draft acceptance</div>
+                                <div class="ml-item__label">First-draft kept</div>
                                 <div id="metricCopyRate" class="ml-item__value"></div>
                             </div>
                             <div class="ml-item">
-                                <div class="ml-item__label">Post-refine acceptance</div>
+                                <div class="ml-item__label">Refine changed the reply</div>
                                 <div id="metricEditRate" class="ml-item__value"></div>
                             </div>
                             <div class="ml-item">
-                                <div class="ml-item__label">Manual edit rescue rate</div>
+                                <div class="ml-item__label">Alignment rescues</div>
                                 <div id="metricBookedRate" class="ml-item__value"></div>
                             </div>
                             <div class="ml-item">
-                                <div class="ml-item__label">Final copy rate</div>
+                                <div class="ml-item__label">Bad suggestion rate</div>
                                 <div id="metricRefineLift" class="ml-item__value"></div>
                             </div>
                         </div>
                     </section>
-                    <button
-                        id="openRevisionBtn"
-                        type="button"
-                        class="button button--ghost button--small hidden"
-                    >
-                        Request Revision
-                    </button>
                     <div id="manualEditPanel" class="manual-edit hidden">
                         <label for="manualEditInput" class="manual-edit__label">Request a revision</label>
                         <div class="quick-edit-row" aria-label="Quick revision shortcuts">
