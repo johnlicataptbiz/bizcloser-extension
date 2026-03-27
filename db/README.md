@@ -16,7 +16,7 @@ model HistoryEntry {
   analysis  Json?
   metadata  Json?
   timestamp DateTime
-  createdAt DateTime @default(now())
+  createdAt DateTime @map("created_at") @default(now())
 
   @@map("history_entries")
 }
@@ -26,7 +26,7 @@ Confirm that the `schema.prisma` file references the same Postgres datasource an
 
 ## 2. Verification checklist
 
-1. ***Schema existance*** – connect to the Postgres instance (`psql $DATABASE_URL` or via your client) and run `\d history_entries`. The columns should match `thread`, `reply`, `analysis`, `metadata`, `timestamp`, and `created_at`.
+1. ***Schema existence*** – connect to the Postgres instance (`psql $DATABASE_URL` or via your client) and run `\d history_entries`. The columns should match `thread`, `reply`, `analysis`, `metadata`, `timestamp`, and `created_at`.
 2. ***Fresh slug*** – look for rows with `created_at` within the last few minutes after you generate a reply. Running `SELECT id, created_at, timestamp FROM history_entries ORDER BY created_at DESC LIMIT 5;` helps prove the table is used.
 3. ***JSON payloads*** – if you store ML analysis/metadata, run `SELECT jsonb_pretty(analysis), jsonb_pretty(metadata) FROM history_entries ORDER BY created_at DESC LIMIT 1;` to ensure the schema accepts the two JSONB fields without errors.
 
