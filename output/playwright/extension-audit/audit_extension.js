@@ -144,6 +144,10 @@ async function run() {
     });
     await saveSnapshot(page, '02-generated-reply');
 
+    // Open the manual revision UI and wait for controls to be ready
+    await page.click('#openRevisionBtn');
+    await page.waitForSelector('#manualEditInput', { state: 'visible' });
+    await page.waitForSelector('#applyEditBtn', { state: 'visible' });
     await page.fill('#manualEditInput', 'Make this shorter and keep the direct strategy-call ask.');
     await page.click('#applyEditBtn');
     await page.waitForFunction(() => {
