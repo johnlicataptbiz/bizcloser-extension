@@ -16,7 +16,7 @@ model HistoryEntry {
   analysis  Json?
   metadata  Json?
   timestamp DateTime
-  createdAt DateTime @default(now())
+  createdAt DateTime @map("created_at") @default(now())
 
   @@map("history_entries")
 }
