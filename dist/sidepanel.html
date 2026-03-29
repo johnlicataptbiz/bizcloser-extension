@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BizCloser</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/icon32.png">
+    <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+    <div class="shell">
+        <header class="app-header">
+            <div class="app-header__row">
+                <div class="app-header__brand">
+                    <img
+                        src="assets/logo1sms.webp"
+                        alt="PT Biz SMS"
+                        class="app-header__logo"
+                    >
+                    <div>
+                    <p class="app-header__eyebrow">PT Biz Side Panel</p>
+                    <h1 class="app-header__title">BizCloser</h1>
+                    </div>
+                </div>
+                <span class="app-header__badge">Live Drafting</span>
+            </div>
+            <p class="app-header__subtitle">One card. One action. Fast reply flow.</p>
+        </header>
+
+        <main class="panel" role="main">
+            <form id="threadForm" class="composer" aria-labelledby="form-title" novalidate>
+                <div class="field">
+                    <div class="field__row">
+                        <label for="threadInput" id="form-title" class="field__label">Conversation</label>
+                        <span class="field__hint">Paste or auto-import</span>
+                    </div>
+                    <textarea
+                        id="threadInput"
+                        class="thread-input"
+                        placeholder="Paste a thread here, or highlight the visible thread in Aloware and import it."
+                        aria-describedby="thread-help"
+                        aria-required="true"
+                        aria-invalid="false"
+                        required
+                    ></textarea>
+                    <p id="thread-help" class="field__note sr-only" role="note">Add context or leave blank to import from the active tab.</p>
+                    <div id="threadStatus" class="field__status" aria-live="polite">Ready when you are.</div>
+                </div>
+
+                <div class="action-stack">
+                    <button
+                        id="primaryActionBtn"
+                        type="submit"
+                        class="button button--primary"
+                        aria-describedby="generate-help"
+                    >
+                        Draft Reply
+                    </button>
+                    <p id="generate-help" class="sr-only">Draft a reply from the pasted thread or import the visible conversation from the current tab.</p>
+                    <p class="action-stack__hint">One click runs with pasted text or imports from the current tab.</p>
+                </div>
+            </form>
+
+            <section id="flowCard" class="flow-card" role="region" aria-label="BizCloser workflow">
+                <div class="flow-card__meta">
+                    <span id="flowStateBadge" class="flow-card__badge">Ready</span>
+                    <div>
+                        <h2 id="flowStateTitle" class="flow-card__title">Waiting for thread</h2>
+                        <p id="flowStateHint" class="flow-card__hint">Paste context or click Draft Reply to import and run.</p>
+                    </div>
+                </div>
+
+                <div id="loading" class="hidden status-card flow-section" role="status" aria-live="polite" aria-busy="true">
+                    <div class="status-card__topline">
+                        <div class="loading-visual" aria-hidden="true">
+                            <div class="loading-orb"></div>
+                            <div class="loading-rings"></div>
+                            <div class="loading-dots">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="card__eyebrow">Pipeline</div>
+                            <p id="loadingMessage" class="status-card__message">Analyzing conversation...</p>
+                        </div>
+                    </div>
+                    <p id="loadingSubtext" class="status-card__subtext">This usually takes a few seconds while BizCloser reads the thread, drafts, and tightens the reply.</p>
+                    <div class="progress-track" aria-hidden="true">
+                        <span class="progress-step is-active" data-stage-step="analysis">Analyze</span>
+                        <span class="progress-step" data-stage-step="draft">Draft</span>
+                        <span class="progress-step" data-stage-step="refine">Refine</span>
+                    </div>
+                </div>
+
+                <div id="analysisLoading" class="hidden status-card flow-section" role="status" aria-live="polite" aria-busy="true">
+                    <div class="status-card__topline">
+                        <div class="loading-visual loading-visual--compact" aria-hidden="true">
+                            <div class="loading-orb"></div>
+                            <div class="loading-rings"></div>
+                        </div>
+                        <div>
+                            <div class="card__eyebrow">Analysis</div>
+                            <p class="status-card__message">Reading the thread and pulling out the most useful signals.</p>
+                        </div>
+                    </div>
+                    <p class="status-card__subtext">We’re extracting intent, objections, and the strongest reply angle before drafting.</p>
+                </div>
+
+                <section id="analysisPanel" class="hidden flow-section analysis-panel" role="region" aria-labelledby="analysis-title">
+                    <div class="card__eyebrow">Analysis</div>
+                    <h2 id="analysis-title" class="card__title">Brief</h2>
+
+                    <div class="analysis-listing">
+                        <div class="analysis-item">
+                            <div class="analysis-item__label">Summary</div>
+                            <div id="analysisSummary" class="analysis-item__value"></div>
+                        </div>
+                        <div class="analysis-item">
+                            <div class="analysis-item__label">What They Want</div>
+                            <div id="analysisIntent" class="analysis-item__value"></div>
+                        </div>
+                        <div class="analysis-item analysis-item--featured">
+                            <div class="analysis-item__label">Recommended Angle</div>
+                            <div id="analysisAngle" class="analysis-item__value"></div>
+                        </div>
+                        <div id="analysisObjectionGroup" class="analysis-item hidden">
+                            <div class="analysis-item__label">Main Friction</div>
+                            <ul id="analysisObjections" class="analysis-bullets"></ul>
+                        </div>
+                    </div>
+
+                    <div class="analysis-confidence">
+                        <span class="analysis-confidence__label">Confidence</span>
+                        <span id="analysisConfidence" class="analysis-confidence__value"></span>
+                    </div>
+                    <div class="feedback-row">
+                        <button id="analysisUpBtn" type="button" class="feedback-btn" aria-label="Analysis thumbs up">Helpful</button>
+                        <button id="analysisDownBtn" type="button" class="feedback-btn" aria-label="Analysis thumbs down">Off</button>
+                    </div>
+                </section>
+
+                <div id="errorState" class="hidden error-card flow-section" role="alert" aria-live="assertive">
+                    <div class="error-card__title">Something went wrong</div>
+                    <p id="errorMessage" class="error-card__message">Unable to generate a reply. Please try again.</p>
+                    <button
+                        id="retryBtn"
+                        class="button button--ghost button--small"
+                    >
+                        Try Again
+                    </button>
+                </div>
+
+                <section id="replyOutput" class="hidden flow-section" role="region" aria-labelledby="reply-title">
+                    <div class="card__eyebrow">Reply</div>
+                    <h2 id="reply-title" class="card__title">Suggested</h2>
+                    <div id="replyContent" class="reply-copy"></div>
+                    <div id="refinementSummary" class="reply-meta hidden"></div>
+                    <section id="metricsPanel" class="ml-panel hidden" aria-labelledby="ml-panel-title">
+                        <div class="ml-panel__header">
+                            <div>
+                                <div class="card__eyebrow">ML Impact</div>
+                                <h3 id="ml-panel-title" class="ml-panel__title">What it is doing over time</h3>
+                            </div>
+                            <div class="ml-panel__controls">
+                                <span id="qualityBadge" class="quality-badge">Tracking live</span>
+                                <button
+                                    id="metricsToggleBtn"
+                                    type="button"
+                                    class="button button--ghost button--chip"
+                                    aria-expanded="false"
+                                    aria-controls="metricsDetails"
+                                >
+                                    Show details
+                                </button>
+                            </div>
+                        </div>
+                        <div class="ml-summary">
+                            <div class="ml-summary__item">
+                                <span class="ml-summary__label">Tracked replies</span>
+                                <span id="metricSessions" class="ml-summary__value"></span>
+                            </div>
+                            <div class="ml-summary__item">
+                                <span class="ml-summary__label">Current status</span>
+                                <span id="metricLatestOutcome" class="ml-summary__value">No signal logged yet</span>
+                            </div>
+                        </div>
+                        <div id="metricsDetails" class="ml-grid hidden">
+                            <div class="ml-item">
+                                <div class="ml-item__label">First-draft kept</div>
+                                <div id="metricCopyRate" class="ml-item__value"></div>
+                            </div>
+                            <div class="ml-item">
+                                <div class="ml-item__label">Refine changed the reply</div>
+                                <div id="metricEditRate" class="ml-item__value"></div>
+                            </div>
+                            <div class="ml-item">
+                                <div class="ml-item__label">Alignment rescues</div>
+                                <div id="metricBookedRate" class="ml-item__value"></div>
+                            </div>
+                            <div class="ml-item">
+                                <div class="ml-item__label">Bad suggestion rate</div>
+                                <div id="metricRefineLift" class="ml-item__value"></div>
+                            </div>
+                        </div>
+                    </section>
+                    <div id="manualEditPanel" class="manual-edit hidden">
+                        <label for="manualEditInput" class="manual-edit__label">Request a revision</label>
+                        <div class="quick-edit-row" aria-label="Quick revision shortcuts">
+                            <button type="button" class="quick-edit-btn" data-quick-edit="Make this shorter and keep the direct CTA.">Shorter</button>
+                            <button type="button" class="quick-edit-btn" data-quick-edit="Make this more direct and confident.">More direct</button>
+                            <button type="button" class="quick-edit-btn" data-quick-edit="Keep it warm but ask only one direct question.">Warmer</button>
+                            <button type="button" class="quick-edit-btn" data-quick-edit="Keep the same angle but make it sound more natural over text.">More natural</button>
+                        </div>
+                        <textarea
+                            id="manualEditInput"
+                            class="manual-edit__input"
+                            placeholder="Example: Make this shorter and ask one direct question."
+                        ></textarea>
+                        <button
+                            id="applyEditBtn"
+                            type="button"
+                            class="button button--ghost"
+                        >
+                            Apply Edit
+                        </button>
+                    </div>
+                    <div class="feedback-row">
+                        <button id="replyUpBtn" type="button" class="feedback-btn" aria-label="Reply thumbs up">Helpful</button>
+                        <button id="replyDownBtn" type="button" class="feedback-btn" aria-label="Reply thumbs down">Needs work</button>
+                    </div>
+                    <div class="reply-actions">
+                        <button
+                            id="copyBtn"
+                            class="button button--primary"
+                            aria-describedby="copy-help"
+                        >
+                            Copy Reply
+                        </button>
+                        <button
+                            id="replySaveNextBtn"
+                            type="button"
+                            class="button button--secondary"
+                            aria-describedby="save-next-help"
+                        >
+                            Save & Next
+                        </button>
+                    </div>
+                    <p id="copy-help" class="sr-only">Copy the generated reply to your clipboard</p>
+                </section>
+
+                <div id="emptyState" class="hidden empty-state flow-section">
+                    <p>The card will move from analysis to final reply automatically after you click Draft Reply.</p>
+                </div>
+            </section>
+        </main>
+
+        <footer class="panel-footer">
+            <button
+                id="clearBtn"
+                class="button button--ghost"
+                aria-describedby="clear-help"
+            >
+                Clear
+            </button>
+            <p id="clear-help" class="sr-only">Clear the conversation thread and current reply</p>
+            <p id="save-next-help" class="sr-only">Save this capture for ML and clear the panel for the next thread</p>
+        </footer>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite">
+        Reply copied to clipboard!
+    </div>
+
+    <script src="sidepanel.js"></script>
+</body>
+</html>
